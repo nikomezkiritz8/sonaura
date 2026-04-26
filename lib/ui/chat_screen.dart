@@ -7,7 +7,7 @@ import '../models/album_model.dart';
 import 'sonaura_style.dart';
 import 'search_results_screen.dart'; 
 import 'album_results_screen.dart'; 
-import 'library_screen.dart'; // Importamos la nueva pantalla de biblioteca local
+import 'library_screen.dart';
 
 class ChatSonaura extends StatefulWidget {
   final String appId;
@@ -32,15 +32,53 @@ class _ChatSonauraState extends State<ChatSonaura> {
   final VoiceService _voice = VoiceService();
   bool _isTyping = false;
   bool _isListening = false;
+  bool _autoListenEnabled = true; // Modo Google Home Activo
 
   @override
   void initState() {
     super.initState();
-    _inicializarServicios();
+    _iniciarSonauraAutonoma();
   }
 
-  void _inicializarServicios() async {
+  // --- LÓGICA DE INICIO AUTÓNOMO ---
+  void _iniciarSonauraAutonoma() async {
     await _voice.init();
+    // Saludo inicial de cortesía
+    setState(() {
+      _messages.add({"role": "sonaura", "text": "Sistema Sonaura en línea. ¿Qué música deseas explorar hoy?"});
+    });
+    await _voice.hablar("Sistema Sonaura en línea. ¿Qué música deseas explorar hoy?");
+    
+    // Abrimos el micro por primera vez automáticamente
+    _activarEscuchaModoHome();
+  }
+
+  // --- EL BUCLE DE ESCUCHA (GOOGLE HOME MODE) ---
+  void _activarEscuchaModoHome() async {
+    if (!mounted || _isTyping || _isListening) return;
+
+    setState(() => _isListening = true);
+
+    _voice.escuchar((res) {
+      if (res.isNotEmpty) {
+        setState(() {
+          _isListening = false;
+          _controller.text = res;
+        });
+        _procesarEntrada(res);
+        _controller.clear();
+      } else {
+        // Si hay silencio absoluto, reiniciamos el micro tras un breve delay
+        _reiniciarEscuchaTrasSilencio();
+      }
+    });
+  }
+
+  void _reiniciarEscuchaTrasSilencio() async {
+    await Future.delayed(const Duration(seconds: 1));
+    if (_autoListenEnabled && !_isListening && !_isTyping) {
+      _activarEscuchaModoHome();
+    }
   }
 
   void _procesarEntrada(String texto) async {
@@ -49,9 +87,10 @@ class _ChatSonauraState extends State<ChatSonaura> {
     setState(() {
       _messages.add({"role": "user", "text": texto});
       _isTyping = true;
+      _isListening = false;
     });
 
-    // 1. Preguntar a Sonaura AI (Ollama en tu RTX 4060)
+    // 1. Preguntar a la IA
     String response = await _ai.preguntar(texto);
 
     if (!mounted) return;
@@ -61,86 +100,61 @@ class _ChatSonauraState extends State<ChatSonaura> {
       _isTyping = false;
     });
 
-    // 2. Voz Natural y Fluida
-    // Filtramos las etiquetas técnicas para que Sonaura no las lea
+    // 2. Sonaura habla (TTS)
     String textoParaHablar = response.replaceAll(RegExp(r'\[.*?\]'), '').trim();
-    _voice.hablar(textoParaHablar);
+    await _voice.hablar(textoParaHablar);
 
-    // 3. Ejecución de comandos inteligentes basados en etiquetas de la IA
+    // 3. Ejecutar comandos de Qobuz/Biblioteca
+    _analizarComandosIA(response, texto);
+
+    // 4. VOLVER A ESCUCHAR AUTOMÁTICAMENTE (Bucle Google Home)
+    if (_autoListenEnabled) {
+      // Esperamos un momento para que el eco de los altavoces no interfiera
+      Future.delayed(const Duration(milliseconds: 800), () {
+        _activarEscuchaModoHome();
+      });
+    }
+  }
+
+  void _analizarComandosIA(String response, String originalText) {
     if (response.contains("[SEARCH_ALBUM:")) {
       String query = response.split("[SEARCH_ALBUM:")[1].split("]")[0].trim();
       _ejecutarBusquedaMusical(query, isAlbum: true);
     } else if (response.contains("[SEARCH_TRACK:")) {
       String query = response.split("[SEARCH_TRACK:")[1].split("]")[0].trim();
       _ejecutarBusquedaMusical(query, isAlbum: false);
-    } else if (texto.toLowerCase().contains("biblioteca") || texto.toLowerCase().contains("mi música")) {
-      // Si hablas de tu biblioteca, te llevamos allí
+    } else if (originalText.toLowerCase().contains("biblioteca") || originalText.toLowerCase().contains("mi música")) {
       _irABibliotecaLocal();
     }
   }
 
   void _irABibliotecaLocal() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => LibraryScreen(
-          appId: widget.appId,
-          appSecret: widget.appSecret,
-          token: widget.token,
-        ),
-      ),
-    );
+    Navigator.push(context, MaterialPageRoute(builder: (context) => LibraryScreen(
+      appId: widget.appId, appSecret: widget.appSecret, token: widget.token,
+    )));
   }
 
   void _ejecutarBusquedaMusical(String queryRaw, {required bool isAlbum}) async {
-    // Limpieza de términos de búsqueda para máxima precisión
-    String query = queryRaw
-        .replaceAll(RegExp(r'(busca|pon|reproduce|escuchar|encuentra|play|album de|album del|album)', caseSensitive: false), '')
-        .trim();
-
-    if (query.isEmpty) return;
-
-    final qobuz = QobuzService(
-      appId: widget.appId,
-      appSecret: widget.appSecret,
-      userAuthToken: widget.token,
-    );
+    String query = queryRaw.replaceAll(RegExp(r'(busca|pon|reproduce|play|album)', caseSensitive: false), '').trim();
+    final qobuz = QobuzService(appId: widget.appId, appSecret: widget.appSecret, userAuthToken: widget.token);
 
     try {
       if (isAlbum) {
         List<SonauraAlbum> albums = await qobuz.searchAlbums(query);
         if (albums.isNotEmpty && mounted) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => AlbumResultsScreen(
-                albums: albums,
-                appId: widget.appId,
-                appSecret: widget.appSecret,
-                token: widget.token,
-              ),
-            ),
-          );
+          Navigator.push(context, MaterialPageRoute(builder: (context) => AlbumResultsScreen(
+            albums: albums, appId: widget.appId, appSecret: widget.appSecret, token: widget.token,
+          )));
         }
       } else {
         List<SonauraTrack> resultados = await qobuz.search(query);
         if (resultados.isNotEmpty && mounted) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => SearchResultsScreen(
-                tracks: resultados,
-                appId: widget.appId,
-                appSecret: widget.appSecret,
-                token: widget.token,
-              ),
-            ),
-          );
+          Navigator.push(context, MaterialPageRoute(builder: (context) => SearchResultsScreen(
+            tracks: resultados, appId: widget.appId, appSecret: widget.appSecret, token: widget.token,
+          )));
         }
       }
-    } catch (e) {
-      debugPrint("Sonaura Neural Link Error: $e");
-    }
+    } catch (e) { debugPrint("Error: $e"); }
   }
 
   @override
@@ -152,26 +166,27 @@ class _ChatSonauraState extends State<ChatSonaura> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 18, color: Colors.white24),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            setState(() => _autoListenEnabled = false); // Apagamos el bucle al salir
+            Navigator.pop(context);
+          },
         ),
         title: Column(
           children: [
-            const Text("SONAURA INTELLIGENCE", 
+            const Text("SONAURA HOME", 
                 style: TextStyle(fontSize: 10, letterSpacing: 4, color: SonauraColors.accentGold, fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
-            Text(_isListening ? "LISTENING..." : "NEURAL LINK ACTIVE", 
+            Text(_isListening ? "LISTENING..." : "AWAITING COMMAND", 
                 style: TextStyle(fontSize: 7, color: _isListening ? Colors.red : Colors.white.withOpacity(0.2), letterSpacing: 2)),
           ],
         ),
         centerTitle: true,
         actions: [
-          // BOTÓN DE ACCESO A BIBLIOTECA LOCAL (/NIKO/MUSIKK)
           IconButton(
-            icon: const Icon(Icons.inventory_2_outlined, color: SonauraColors.accentGold, size: 22),
-            onPressed: _irABibliotecaLocal,
-            tooltip: "Mi Biblioteca Local",
+            icon: Icon(_autoListenEnabled ? Icons.sensors : Icons.sensors_off, 
+                color: _autoListenEnabled ? SonauraColors.accentGold : Colors.white10),
+            onPressed: () => setState(() => _autoListenEnabled = !_autoListenEnabled),
           ),
-          const SizedBox(width: 10),
         ],
       ),
       body: Column(
@@ -184,21 +199,20 @@ class _ChatSonauraState extends State<ChatSonaura> {
                 final m = _messages[index];
                 bool isUser = m["role"] == "user";
                 return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  padding: const EdgeInsets.symmetric(vertical: 15),
                   child: Column(
                     crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                     children: [
-                      Text(isUser ? "USER_PROMPT" : "SONAURA_CORE", 
+                      Text(isUser ? "YOU" : "SONAURA", 
                           style: TextStyle(fontSize: 8, color: SonauraColors.accentGold.withOpacity(0.5), letterSpacing: 2)),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 8),
                       Text(
-                        // Limpiamos etiquetas en la interfaz para que se vea impecable
                         m["text"]!.replaceAll(RegExp(r'\[.*?\]'), '').trim(), 
                         style: TextStyle(
                           fontSize: 18, 
-                          height: 1.6,
+                          height: 1.5,
                           fontWeight: isUser ? FontWeight.w300 : FontWeight.w400, 
-                          color: isUser ? Colors.white60 : Colors.white,
+                          color: isUser ? Colors.white70 : Colors.white,
                           fontStyle: isUser ? FontStyle.normal : FontStyle.italic,
                         )
                       ),
@@ -215,66 +229,50 @@ class _ChatSonauraState extends State<ChatSonaura> {
               child: LinearProgressIndicator(color: SonauraColors.accentGold, backgroundColor: Colors.transparent, minHeight: 1),
             ),
 
+          // --- BARRA DE ESTADO DE ESCUCHA ---
           Container(
             padding: const EdgeInsets.only(left: 30, right: 30, bottom: 40, top: 20),
             decoration: const BoxDecoration(
               color: SonauraColors.surface,
               borderRadius: BorderRadius.vertical(top: Radius.circular(40)),
             ),
-            child: Row(
+            child: Column(
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w300),
-                    decoration: InputDecoration(
-                      hintText: _isListening ? "Escuchando..." : "Conversa con Sonaura...",
-                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 14),
-                      border: InputBorder.none,
-                    ),
-                    onSubmitted: (val) { 
-                      _procesarEntrada(val); 
-                      _controller.clear(); 
-                    },
+                if (_isListening)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 15),
+                    child: Text("Sonaura te escucha...", style: TextStyle(color: SonauraColors.accentGold, fontSize: 12, fontStyle: FontStyle.italic)),
                   ),
-                ),
-                
-                GestureDetector(
-                  onLongPressStart: (_) async {
-                    setState(() => _isListening = true);
-                    _voice.escuchar((res) {
-                      setState(() => _controller.text = res);
-                    });
-                  },
-                  onLongPressEnd: (_) async {
-                    setState(() => _isListening = false);
-                    _voice.detener();
-                    await Future.delayed(const Duration(milliseconds: 600));
-                    if (_controller.text.isNotEmpty) {
-                      _procesarEntrada(_controller.text);
-                      _controller.clear();
-                    }
-                  },
-                  child: AnimatedScale(
-                    scale: _isListening ? 1.4 : 1.0,
-                    duration: const Duration(milliseconds: 150),
-                    child: Container(
-                      padding: const EdgeInsets.all(15),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _controller,
+                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                        decoration: const InputDecoration(hintText: "Escribe o habla...", border: InputBorder.none),
+                        onSubmitted: (val) { _procesarEntrada(val); _controller.clear(); },
+                      ),
+                    ),
+                    
+                    // BOTÓN VISUAL DEL MODO HOME
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: _isListening ? Colors.red.withOpacity(0.2) : Colors.transparent,
                         border: Border.all(
-                          color: _isListening ? Colors.red : SonauraColors.accentGold.withOpacity(0.4),
-                          width: 1,
+                          color: _isListening ? Colors.red : SonauraColors.accentGold.withOpacity(0.2),
+                          width: 2,
                         ),
+                        boxShadow: _isListening ? [BoxShadow(color: Colors.red.withOpacity(0.3), blurRadius: 15)] : [],
                       ),
                       child: Icon(
                         _isListening ? Icons.graphic_eq : Icons.mic_none, 
                         color: _isListening ? Colors.red : SonauraColors.accentGold, 
-                        size: 26
+                        size: 28
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),
