@@ -23,8 +23,14 @@ class _ChatSonauraState extends State<ChatSonaura> {
   final SonauraAI _ai = SonauraAI();
   final VoiceService _voice = VoiceService();
   bool _isTyping = false;
-  bool _isActivated = false; // ¿Ha escuchado "Sonaura"?
+  bool _isActivated = false; 
   bool _autoListen = true;
+
+  // LISTA DE ENTRENAMIENTO FONÉTICO
+  final List<String> _wakeWordVariations = [
+    "sonaura", "sonora", "so now", "so now that", "son ahora", 
+    "señora", "son ahora que", "sona", "aura", "hey sonaura"
+  ];
 
   @override
   void initState() {
@@ -34,8 +40,13 @@ class _ChatSonauraState extends State<ChatSonaura> {
 
   void _bootSonaura() async {
     await _voice.init();
-    _speakAndDisplay("Sistema Sonaura listo. Di 'Hey Sonaura' para activarme.");
+    _speakAndDisplay("Sonaura online. Di mi nombre para activarme.");
     _startListeningLoop();
+  }
+
+  bool _detectWakeWord(String text) {
+    String input = text.toLowerCase();
+    return _wakeWordVariations.any((variation) => input.contains(input));
   }
 
   void _startListeningLoop() {
@@ -44,37 +55,46 @@ class _ChatSonauraState extends State<ChatSonaura> {
     _voice.escuchar(
       onResult: (t) {
         setState(() => _controller.text = t);
-        // LÓGICA WAKE WORD
-        if (t.toLowerCase().contains("sonaura") && !_isActivated) {
+        
+        // ACTIVACIÓN INSTANTÁNEA (SI DETECTA EL NOMBRE O ALGO PARECIDO)
+        if (_detectWakeWord(t) && !_isActivated) {
           setState(() => _isActivated = true);
+          // Opcional: Podríamos hacer un pequeño sonido de "bip" aquí
         }
       },
       onComplete: () {
-        if (_controller.text.isNotEmpty) {
-          String val = _controller.text;
-          _controller.clear();
-          
-          if (_isActivated || val.toLowerCase().contains("sonaura")) {
+        String val = _controller.text.trim();
+        if (val.isNotEmpty) {
+          if (_isActivated || _detectWakeWord(val)) {
              setState(() => _isActivated = false);
-             _handleInput(val);
+             _controller.clear();
+             _handleInput(val); // Enviamos la frase a la RTX 4060
           } else {
-             // Si habló pero no dijo Sonaura, volvemos a escuchar en silencio
+             // No ha dicho el nombre, ignoramos y seguimos vigilando
+             _controller.clear();
              _startListeningLoop();
           }
         } else {
-          Future.delayed(const Duration(milliseconds: 500), () => _startListeningLoop());
+          // Silencio total, reiniciamos el loop de vigilancia
+          Future.delayed(const Duration(milliseconds: 300), () => _startListeningLoop());
         }
       }
     );
   }
 
   void _handleInput(String text) async {
+    // Limpiamos el nombre del comando para que la IA no se líe
+    String cleanInput = text;
+    for (var word in _wakeWordVariations) {
+      cleanInput = cleanInput.toLowerCase().replaceFirst(word, "").trim();
+    }
+
     setState(() {
       _messages.add({"role": "user", "text": text});
       _isTyping = true;
     });
 
-    String response = await _ai.preguntar(text);
+    String response = await _ai.preguntar(cleanInput);
     if (!mounted) return;
 
     setState(() {
@@ -83,7 +103,7 @@ class _ChatSonauraState extends State<ChatSonaura> {
     });
 
     await _voice.hablar(response);
-    _execCommands(response, text);
+    _execCommands(response, cleanInput);
 
     if (_autoListen) _startListeningLoop();
   }
@@ -94,7 +114,7 @@ class _ChatSonauraState extends State<ChatSonaura> {
     } else if (response.contains("[SEARCH_TRACK:")) {
       _execSearch(response.split("[SEARCH_TRACK:")[1].split("]")[0], false);
     } else if (text.toLowerCase().contains("biblioteca")) {
-      Navigator.push(context, MaterialPageRoute(builder: (c) => LibraryScreen(appId: widget.appId, appSecret: widget.appSecret, token: widget.token)));
+      _navToLibrary();
     }
   }
 
@@ -109,6 +129,8 @@ class _ChatSonauraState extends State<ChatSonaura> {
     }
   }
 
+  void _navToLibrary() => Navigator.push(context, MaterialPageRoute(builder: (c) => LibraryScreen(appId: widget.appId, appSecret: widget.appSecret, token: widget.token)));
+
   void _speakAndDisplay(String t) {
     setState(() => _messages.add({"role": "sonaura", "text": t}));
     _voice.hablar(t);
@@ -120,12 +142,9 @@ class _ChatSonauraState extends State<ChatSonaura> {
       backgroundColor: SonauraColors.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent, elevation: 0,
-        title: Text(_isActivated ? "ESCUCHANDO..." : "MODO VIGILANTE", style: TextStyle(fontSize: 10, letterSpacing: 4, color: _isActivated ? Colors.red : SonauraColors.accentGold)),
+        title: Text(_isActivated ? "SISTEMA ACTIVO" : "MODO VIGILANTE", 
+            style: TextStyle(fontSize: 10, letterSpacing: 4, color: _isActivated ? Colors.redAccent : Colors.white24)),
         centerTitle: true,
-        actions: [
-          IconButton(icon: const Icon(Icons.volume_off, color: Colors.white24, size: 20), onPressed: () => _voice.detenerHabla()),
-          IconButton(icon: Icon(Icons.inventory_2_outlined, color: SonauraColors.accentGold, size: 20), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LibraryScreen(appId: widget.appId, appSecret: widget.appSecret, token: widget.token)))),
-        ],
       ),
       body: Column(
         children: [
@@ -158,18 +177,18 @@ class _ChatSonauraState extends State<ChatSonaura> {
               children: [
                 Row(
                   children: [
-                    Expanded(child: TextField(controller: _controller, style: const TextStyle(color: Colors.white), decoration: InputDecoration(hintText: _isActivated ? "Te escucho..." : "Di 'Sonaura'...", border: InputBorder.none))),
+                    Expanded(child: TextField(controller: _controller, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w200), decoration: InputDecoration(hintText: _isActivated ? "Dime qué necesitas..." : "Di 'Sonaura'...", border: InputBorder.none, hintStyle: const TextStyle(color: Colors.white10)))),
                     
-                    // BOTÓN VISUAL WAKE WORD
+                    // ICONO DE ESTADO
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 300),
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle, 
+                        color: _isActivated ? Colors.red.withOpacity(0.1) : Colors.transparent,
                         border: Border.all(color: _isActivated ? Colors.red : Colors.white10),
-                        boxShadow: _isActivated ? [BoxShadow(color: Colors.red.withOpacity(0.5), blurRadius: 20)] : []
                       ),
-                      child: Icon(_isActivated ? Icons.graphic_eq : Icons.mic_none, color: _isActivated ? Colors.red : Colors.white24, size: 28),
+                      child: Icon(_isActivated ? Icons.mic : Icons.mic_none, color: _isActivated ? Colors.red : Colors.white24, size: 28),
                     ),
                   ],
                 ),
