@@ -3,10 +3,10 @@ import '../services/sonaura_ai.dart';
 import '../services/voice_service.dart';
 import '../services/qobuz_service.dart'; 
 import '../models/track_model.dart';
-import '../models/album_model.dart'; // Asegúrate de haber creado este modelo
+import '../models/album_model.dart'; 
 import 'sonaura_style.dart';
 import 'search_results_screen.dart'; 
-import 'album_results_screen.dart'; // Nueva pantalla para discografías
+import 'album_results_screen.dart'; 
 
 class ChatSonaura extends StatefulWidget {
   final String appId;
@@ -50,6 +50,7 @@ class _ChatSonauraState extends State<ChatSonaura> {
       _isTyping = true;
     });
 
+    // 1. Preguntar a Sonaura AI (Ollama)
     String response = await _ai.preguntar(texto);
 
     if (!mounted) return;
@@ -59,23 +60,32 @@ class _ChatSonauraState extends State<ChatSonaura> {
       _isTyping = false;
     });
 
-    _voice.hablar(response);
+    // 2. Voz Natural (Filtramos las etiquetas para que no las lea el TTS)
+    String textoParaHablar = response.replaceAll(RegExp(r'\[.*?\]'), '').trim();
+    _voice.hablar(textoParaHablar);
 
-    // ANALIZADOR DE INTENCIÓN MEJORADO
-    String promptLower = texto.toLowerCase();
-    List<String> keywords = ["busca", "pon", "reproduce", "encuentra", "escuchar", "play", "album"];
-    
-    if (keywords.any((key) => promptLower.contains(key))) {
-      _ejecutarBusquedaMusical(texto);
+    // 3. Extracción de intención por etiquetas de IA (Precisión total)
+    if (response.contains("[SEARCH_ALBUM:")) {
+      String query = response.split("[SEARCH_ALBUM:")[1].split("]")[0].trim();
+      _ejecutarBusquedaMusical(query, isAlbum: true);
+    } else if (response.contains("[SEARCH_TRACK:")) {
+      String query = response.split("[SEARCH_TRACK:")[1].split("]")[0].trim();
+      _ejecutarBusquedaMusical(query, isAlbum: false);
+    } else {
+      // Fallback: Si la IA no puso etiquetas, usamos el motor de palabras clave antiguo
+      String promptLower = texto.toLowerCase();
+      if (promptLower.contains("album")) {
+         _ejecutarBusquedaMusical(texto.replaceAll("album", ""), isAlbum: true);
+      } else if (promptLower.contains("busca") || promptLower.contains("pon")) {
+         _ejecutarBusquedaMusical(texto, isAlbum: false);
+      }
     }
   }
 
-  void _ejecutarBusquedaMusical(String texto) async {
-    final String promptLower = texto.toLowerCase();
-    
-    // Limpiamos el texto para obtener solo el artista/álbum
-    String query = texto
-        .replaceAll(RegExp(r'(busca|pon|reproduce|escuchar|encuentra|oír|quiero escuchar|toca|play|album de|album del|album)', caseSensitive: false), '')
+  void _ejecutarBusquedaMusical(String queryRaw, {required bool isAlbum}) async {
+    // Limpieza final de la consulta
+    String query = queryRaw
+        .replaceAll(RegExp(r'(busca|pon|reproduce|escuchar|encuentra|play|album de|album del|album)', caseSensitive: false), '')
         .trim();
 
     if (query.isEmpty) return;
@@ -87,8 +97,8 @@ class _ChatSonauraState extends State<ChatSonaura> {
     );
 
     try {
-      // SI EL USUARIO MENCIONA "ALBUM", BUSCAMOS DISCOGRAFÍAS
-      if (promptLower.contains("album")) {
+      if (isAlbum) {
+        // Búsqueda de discografía completa
         List<SonauraAlbum> albums = await qobuz.searchAlbums(query);
         if (albums.isNotEmpty && mounted) {
           Navigator.push(
@@ -104,7 +114,7 @@ class _ChatSonauraState extends State<ChatSonaura> {
           );
         }
       } else {
-        // BÚSQUEDA NORMAL DE CANCIONES
+        // Búsqueda de canciones sueltas
         List<SonauraTrack> resultados = await qobuz.search(query);
         if (resultados.isNotEmpty && mounted) {
           Navigator.push(
@@ -121,7 +131,7 @@ class _ChatSonauraState extends State<ChatSonaura> {
         }
       }
     } catch (e) {
-      debugPrint("Error en búsqueda Sonaura: $e");
+      debugPrint("Sonaura Link Error: $e");
     }
   }
 
@@ -165,7 +175,8 @@ class _ChatSonauraState extends State<ChatSonaura> {
                           style: TextStyle(fontSize: 8, color: SonauraColors.accentGold.withOpacity(0.5), letterSpacing: 2)),
                       const SizedBox(height: 10),
                       Text(
-                        m["text"]!, 
+                        // Mostramos el texto limpio de etiquetas en la UI también para que quede elegante
+                        m["text"]!.replaceAll(RegExp(r'\[.*?\]'), '').trim(), 
                         style: TextStyle(
                           fontSize: 18, 
                           height: 1.6,
@@ -200,7 +211,7 @@ class _ChatSonauraState extends State<ChatSonaura> {
                     controller: _controller,
                     style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w300),
                     decoration: InputDecoration(
-                      hintText: _isListening ? "Escuchando..." : "Escribe o pulsa el micro...",
+                      hintText: _isListening ? "Escuchando tu voz..." : "Pide un álbum o canción...",
                       hintStyle: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 14),
                       border: InputBorder.none,
                     ),

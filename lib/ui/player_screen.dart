@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../models/track_model.dart';
@@ -6,17 +7,8 @@ import 'sonaura_style.dart';
 
 class PlayerScreen extends StatefulWidget {
   final SonauraTrack track;
-  final String appId;
-  final String appSecret;
-  final String token;
-
-  const PlayerScreen({
-    super.key, 
-    required this.track, 
-    required this.appId, 
-    required this.appSecret, 
-    required this.token
-  });
+  final String appId; final String appSecret; final String token;
+  const PlayerScreen({super.key, required this.track, required this.appId, required this.appSecret, required this.token});
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -27,129 +19,115 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   bool _isPlaying = false;
-  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _audioPlayer = AudioPlayer();
-    
-    // Escuchar cambios de posición y duración
     _audioPlayer.onPositionChanged.listen((p) => setState(() => _position = p));
     _audioPlayer.onDurationChanged.listen((d) => setState(() => _duration = d));
     _audioPlayer.onPlayerStateChanged.listen((s) => setState(() => _isPlaying = s == PlayerState.playing));
-
     _prepararAudio();
   }
 
   void _prepararAudio() async {
-    final qobuz = QobuzService(
-      appId: widget.appId,
-      appSecret: widget.appSecret,
-      userAuthToken: widget.token
-    );
-
+    final qobuz = QobuzService(appId: widget.appId, appSecret: widget.appSecret, userAuthToken: widget.token);
     String? url = await qobuz.getHiResStreamUrl(widget.track.id);
-    print("SONAURA_AUDIO_URL: $url");
-
-    if (url != null) {
-      try {
-        // En Audioplayers para Linux, usamos Source de URL directa
-        await _audioPlayer.play(UrlSource(url));
-      } catch (e) {
-        print("Sonaura Audio Error: $e");
-      }
-    }
-    setState(() => _isLoading = false);
+    if (url != null) await _audioPlayer.play(UrlSource(url));
   }
 
   @override
-  void dispose() {
-    _audioPlayer.dispose();
-    super.dispose();
-  }
+  void dispose() { _audioPlayer.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: SonauraColors.background,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white24, size: 30),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Column(
-          children: [
-            const Text("SONAURA HI-RES PLAYER", style: TextStyle(fontSize: 8, letterSpacing: 2, color: Colors.white24)),
-            Text("${widget.track.quality} | ${widget.track.bitDepth}-BIT", 
-                 style: const TextStyle(fontSize: 10, color: SonauraColors.accentGold, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        centerTitle: true,
-      ),
-      body: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+      backgroundColor: Colors.black,
+      body: Stack(
         children: [
-          Center(
-            child: Container(
-              width: 300, height: 300,
-              decoration: BoxDecoration(
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 40)],
-                image: DecorationImage(image: NetworkImage(widget.track.coverUrl), fit: BoxFit.cover),
-              ),
+          // FONDO DIFUMINADO
+          Container(
+            height: double.infinity, width: double.infinity,
+            decoration: BoxDecoration(
+              image: DecorationImage(image: NetworkImage(widget.track.coverUrl), fit: BoxFit.cover),
+            ),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
+              child: Container(color: Colors.black.withOpacity(0.4)),
             ),
           ),
-          const SizedBox(height: 40),
-          Text(widget.track.title, style: const TextStyle(fontSize: 22, fontStyle: FontStyle.italic)),
-          Text(widget.track.artist.toUpperCase(), style: const TextStyle(letterSpacing: 4, color: Colors.white38, fontSize: 12)),
           
-          const SizedBox(height: 40),
-          
-          Slider(
-            activeColor: SonauraColors.accentGold,
-            inactiveColor: Colors.white10,
-            value: _position.inSeconds.toDouble(),
-            max: _duration.inSeconds.toDouble() > 0 ? _duration.inSeconds.toDouble() : 1.0,
-            onChanged: (value) => _audioPlayer.seek(Duration(seconds: value.toInt())),
-          ),
-          
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 25),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          // CONTENIDO
+          SafeArea(
+            child: Column(
               children: [
-                Text(_formatDuration(_position), style: const TextStyle(color: Colors.white24, fontSize: 10)),
-                Text(_formatDuration(_duration), style: const TextStyle(color: Colors.white24, fontSize: 10)),
+                AppBar(
+                  backgroundColor: Colors.transparent, elevation: 0,
+                  leading: IconButton(icon: const Icon(Icons.keyboard_arrow_down, size: 35), onPressed: () => Navigator.pop(context)),
+                  title: Text("${widget.track.quality} | ${widget.track.bitDepth}-BIT", style: const TextStyle(fontSize: 10, letterSpacing: 2, color: SonauraColors.accentGold)),
+                  centerTitle: true,
+                ),
+                const Spacer(),
+                
+                // CARÁTULA PRINCIPAL
+                Container(
+                  width: MediaQuery.of(context).size.width * 0.8,
+                  height: MediaQuery.of(context).size.width * 0.8,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(15),
+                    boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 40, spreadRadius: 10)],
+                    image: DecorationImage(image: NetworkImage(widget.track.coverUrl), fit: BoxFit.cover),
+                  ),
+                ),
+                
+                const Spacer(),
+                Text(widget.track.title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                Text(widget.track.artist.toUpperCase(), style: const TextStyle(fontSize: 13, letterSpacing: 4, color: Colors.white60)),
+                
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 30),
+                  child: Column(
+                    children: [
+                      SliderTheme(
+                        data: SliderTheme.of(context).copyWith(trackHeight: 2, thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6), activeTrackColor: Colors.white, inactiveTrackColor: Colors.white24),
+                        child: Slider(
+                          value: _position.inSeconds.toDouble(),
+                          max: _duration.inSeconds.toDouble() > 0 ? _duration.inSeconds.toDouble() : 1.0,
+                          onChanged: (v) => _audioPlayer.seek(Duration(seconds: v.toInt())),
+                        ),
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(_formatDuration(_position), style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                          Text(_formatDuration(_duration), style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    const Icon(Icons.shuffle, color: Colors.white24),
+                    IconButton(icon: const Icon(Icons.skip_previous, size: 45, color: Colors.white), onPressed: () {}),
+                    IconButton(
+                      icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled, size: 85, color: Colors.white),
+                      onPressed: () => _isPlaying ? _audioPlayer.pause() : _audioPlayer.resume(),
+                    ),
+                    IconButton(icon: const Icon(Icons.skip_next, size: 45, color: Colors.white), onPressed: () {}),
+                    const Icon(Icons.repeat, color: Colors.white24),
+                  ],
+                ),
+                const SizedBox(height: 40),
               ],
             ),
           ),
-
-          const SizedBox(height: 40),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              const Icon(Icons.shuffle, color: Colors.white10),
-              IconButton(icon: const Icon(Icons.skip_previous, size: 40), onPressed: () {}),
-              _isLoading 
-                ? const CircularProgressIndicator(color: SonauraColors.accentGold)
-                : IconButton(
-                    icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled, 
-                    color: SonauraColors.accentGold, size: 70),
-                    onPressed: () => _isPlaying ? _audioPlayer.pause() : _audioPlayer.resume(),
-                  ),
-              IconButton(icon: const Icon(Icons.skip_next, size: 40), onPressed: () {}),
-              const Icon(Icons.repeat, color: Colors.white10),
-            ],
-          )
         ],
       ),
     );
   }
 
-  String _formatDuration(Duration d) {
-    return "${d.inMinutes.toString().padLeft(2, '0')}:${(d.inSeconds % 60).toString().padLeft(2, '0')}";
-  }
+  String _formatDuration(Duration d) => "${d.inMinutes.toString().padLeft(2, '0')}:${(d.inSeconds % 60).toString().padLeft(2, '0')}";
 }
