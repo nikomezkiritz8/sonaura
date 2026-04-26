@@ -4,7 +4,6 @@ from flask_cors import CORS
 from mutagen.flac import FLAC
 from mutagen.mp3 import MP3
 from mutagen.id3 import ID3
-import io
 
 app = Flask(__name__)
 CORS(app)
@@ -20,12 +19,32 @@ def list_music():
     for root, dirs, files in os.walk(MUSIC_PATH):
         for file in files:
             if file.lower().endswith(('.flac', '.mp3')):
-                rel_path = os.path.relpath(os.path.join(root, file), MUSIC_PATH)
-                # La carátula ahora apunta a nuestra nueva ruta de extracción
+                full_path = os.path.join(root, file)
+                rel_path = os.path.relpath(full_path, MUSIC_PATH)
+                
+                # VALORES POR DEFECTO
+                bit_depth = 16
+                sample_rate = 44100
+                
+                # EXTRACCIÓN DE METADATOS REALES
+                try:
+                    if file.lower().endswith('.flac'):
+                        audio = FLAC(full_path)
+                        bit_depth = audio.info.bits_per_sample
+                        sample_rate = audio.info.sample_rate
+                    elif file.lower().endswith('.mp3'):
+                        audio = MP3(full_path)
+                        sample_rate = audio.info.sample_rate
+                        bit_depth = 16 # MP3 es técnicamente 16-bit
+                except:
+                    pass
+
                 songs.append({
                     "title": file,
                     "path": rel_path,
-                    "cover": f"art/{rel_path}" 
+                    "cover": f"art/{rel_path}",
+                    "bit_depth": bit_depth,
+                    "sample_rate": sample_rate // 1000 # Lo pasamos a kHz (ej: 44)
                 })
     return jsonify(songs)
 
@@ -46,12 +65,10 @@ def get_art(filename):
             tags = audio.tags.getall("APIC")
             if tags:
                 return Response(tags[0].data, mimetype=tags[0].mime)
-    except Exception as e:
-        print(f"Error extrayendo arte: {e}")
-    
-    # Si no tiene imagen interna, enviamos una transparente o error
+    except:
+        pass
     return "No art", 404
 
 if __name__ == '__main__':
-    print(f"--- Sonaura Engine: Extractor de Arte Incrustado Activo ---")
+    print("--- Servidor Sonaura: Metadatos Reales Activos ---")
     app.run(host='0.0.0.0', port=5050, threaded=True)

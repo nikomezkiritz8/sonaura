@@ -8,22 +8,14 @@ class LocalMusicService {
   Future<List<SonauraTrack>> getLocalTracks() async {
     List<SonauraTrack> tracks = [];
     try {
-      final response = await http.get(Uri.parse('$serverUrl/list'));
+      final response = await http.get(Uri.parse('$serverUrl/list')).timeout(const Duration(seconds: 15));
       if (response.statusCode == 200) {
         List data = jsonDecode(response.body);
         for (var item in data) {
-          tracks.add(SonauraTrack(
-            id: "$serverUrl/file/${Uri.encodeFull(item['path'])}", 
-            title: item['title'],
-            artist: "Disco NIKO",
-            // Ahora la URL de la carátula va a la ruta de extracción
-            coverUrl: "$serverUrl/${Uri.encodeFull(item['cover'])}",
-            quality: "FLAC HI-RES",
-            sampleRate: 44, bitDepth: 16, isLocal: true,
-          ));
+          tracks.add(SonauraTrack.fromLocalJson(item, serverUrl));
         }
       }
-    } catch (e) { print("Error: $e"); }
+    } catch (e) { print("Error Vault: $e"); }
     return tracks;
   }
 }

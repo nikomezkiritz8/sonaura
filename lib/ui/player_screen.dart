@@ -4,8 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import '../models/track_model.dart';
 import '../services/qobuz_service.dart';
-import '../services/sonaura_ai.dart';
-import '../services/voice_service.dart';
 import 'sonaura_style.dart';
 
 class PlayerScreen extends StatefulWidget {
@@ -22,9 +20,7 @@ class PlayerScreen extends StatefulWidget {
 class _PlayerScreenState extends State<PlayerScreen> with TickerProviderStateMixin {
   late AudioPlayer _audioPlayer;
   late int _currentIndex;
-  late AnimationController _spectrumController;
-  final SonauraAI _ai = SonauraAI();
-  final VoiceService _voice = VoiceService();
+  late AnimationController _bgController;
   bool _isShuffle = false;
   bool _isBuffering = true;
 
@@ -33,7 +29,13 @@ class _PlayerScreenState extends State<PlayerScreen> with TickerProviderStateMix
     super.initState();
     _currentIndex = widget.initialIndex;
     _audioPlayer = AudioPlayer();
-    _spectrumController = AnimationController(vsync: this, duration: const Duration(seconds: 1))..repeat();
+    _bgController = AnimationController(vsync: this, duration: const Duration(seconds: 15))..repeat(reverse: true);
+
+    // AUTO-NEXT: Al terminar una canción, salta a la siguiente
+    _audioPlayer.playerStateStream.listen((state) {
+      if (state.processingState == ProcessingState.completed) { _next(); }
+    });
+
     _prepararAudio();
   }
 
@@ -51,30 +53,20 @@ class _PlayerScreenState extends State<PlayerScreen> with TickerProviderStateMix
     if (mounted) setState(() => _isBuffering = false);
   }
 
-  void _obtenerInsight() async {
-    final track = widget.playlist[_currentIndex];
-    String metadata = "${track.title} de ${track.artist} (${track.quality})";
-    String response = await _ai.preguntar("Haz un análisis audiófilo de esta pieza.", metadata: metadata);
-    _voice.hablar(response);
-    
-    if (!mounted) return;
-    showModalBottomSheet(
-      context: context, 
-      backgroundColor: Colors.black.withOpacity(0.9), // CORREGIDO AQUÍ
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
-      builder: (context) => Container(padding: const EdgeInsets.all(30), child: SingleChildScrollView(child: Column(children: [
-        const Text("SONAURA INSIGHT", style: TextStyle(color: SonauraColors.accentGold, letterSpacing: 4, fontSize: 10, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 20),
-        Text(response, style: const TextStyle(color: Colors.white, fontSize: 16, fontStyle: FontStyle.italic, height: 1.6)),
-      ]))),
-    );
+  void _next() {
+    setState(() {
+      _currentIndex = _isShuffle ? math.Random().nextInt(widget.playlist.length) : (_currentIndex + 1) % widget.playlist.length;
+    });
+    _prepararAudio();
   }
 
-  void _next() { setState(() { _currentIndex = _isShuffle ? math.Random().nextInt(widget.playlist.length) : (_currentIndex + 1) % widget.playlist.length; }); _prepararAudio(); }
-  void _prev() { setState(() { _currentIndex = (_currentIndex - 1 + widget.playlist.length) % widget.playlist.length; }); _prepararAudio(); }
+  void _prev() {
+    setState(() { _currentIndex = (_currentIndex - 1 + widget.playlist.length) % widget.playlist.length; });
+    _prepararAudio();
+  }
 
   @override
-  void dispose() { _audioPlayer.dispose(); _spectrumController.dispose(); super.dispose(); }
+  void dispose() { _audioPlayer.dispose(); _bgController.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
@@ -83,10 +75,16 @@ class _PlayerScreenState extends State<PlayerScreen> with TickerProviderStateMix
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          Container(
-            height: double.infinity, width: double.infinity,
-            decoration: BoxDecoration(image: DecorationImage(image: NetworkImage(track.coverUrl), fit: BoxFit.cover)),
-            child: BackdropFilter(filter: ImageFilter.blur(sigmaX: 70, sigmaY: 70), child: Container(color: Colors.black.withOpacity(0.5))),
+          // FONDO ANIMADO
+          AnimatedBuilder(
+            animation: _bgController,
+            builder: (c, child) => Transform.scale(
+              scale: 1.2 + (_bgController.value * 0.2),
+              child: Container(
+                decoration: BoxDecoration(image: DecorationImage(image: NetworkImage(track.coverUrl), fit: BoxFit.cover)),
+                child: BackdropFilter(filter: ImageFilter.blur(sigmaX: 70, sigmaY: 70), child: Container(color: Colors.black.withOpacity(0.4))),
+              ),
+            ),
           ),
           SafeArea(
             child: Column(
@@ -95,27 +93,27 @@ class _PlayerScreenState extends State<PlayerScreen> with TickerProviderStateMix
                   backgroundColor: Colors.transparent, elevation: 0,
                   leading: IconButton(icon: const Icon(Icons.keyboard_arrow_down, size: 30, color: Colors.white70), onPressed: () => Navigator.pop(context)),
                   title: Column(children: [
-                    Text(track.isLocal ? "REMOTE VAULT" : "QOBUZ HI-RES", style: const TextStyle(fontSize: 7, color: Colors.white38)),
-                    Text("FLAC | ${track.bitDepth}-BIT | ${track.sampleRate}KHZ", style: const TextStyle(fontSize: 9, color: SonauraColors.accentGold, fontWeight: FontWeight.bold)),
+                    Text(track.isLocal ? "REMOTE VAULT" : "QOBUZ HI-RES", style: const TextStyle(fontSize: 7, color: Colors.white38, letterSpacing: 2)),
+                    const SizedBox(height: 4),
+                    Text("FLAC | ${track.bitDepth}-BIT | ${track.sampleRate}KHZ", style: const TextStyle(fontSize: 10, color: SonauraColors.accentGold, fontWeight: FontWeight.bold)),
                   ]),
-                  actions: [IconButton(icon: const Icon(Icons.psychology, color: SonauraColors.accentGold), onPressed: _obtenerInsight)],
+                  centerTitle: true,
                 ),
                 const Spacer(),
                 Container(
-                  width: 280, height: 280,
-                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 40)], image: DecorationImage(image: NetworkImage(track.coverUrl), fit: BoxFit.cover)),
+                  width: MediaQuery.of(context).size.width * 0.8, height: MediaQuery.of(context).size.width * 0.8,
+                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black87, blurRadius: 40)], image: DecorationImage(image: NetworkImage(track.coverUrl), fit: BoxFit.cover)),
                 ),
                 const Spacer(),
-                
-                // ESPECTRO FFT ANIMADO
-                Container(height: 40, width: double.infinity, padding: const EdgeInsets.symmetric(horizontal: 60),
-                  child: AnimatedBuilder(animation: _spectrumController, builder: (c, _) => CustomPaint(painter: SpectrumPainter(animationValue: _spectrumController.value, isPlaying: _audioPlayer.playing)))),
-
-                const SizedBox(height: 20),
-                Text(track.cleanTitle, textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
-                Text(track.artist.toUpperCase(), style: const TextStyle(fontSize: 10, letterSpacing: 5, color: Colors.white38)),
-                
-                const SizedBox(height: 30),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 40),
+                  child: Column(children: [
+                    Text(track.cleanTitle, textAlign: TextAlign.center, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
+                    const SizedBox(height: 8),
+                    const Text("SONAURA HIGH-END AUDIO", style: TextStyle(fontSize: 9, letterSpacing: 4, color: Colors.white24)),
+                  ]),
+                ),
+                const SizedBox(height: 40),
                 StreamBuilder<Duration>(
                   stream: _audioPlayer.positionStream,
                   builder: (context, snapshot) {
@@ -136,7 +134,7 @@ class _PlayerScreenState extends State<PlayerScreen> with TickerProviderStateMix
                     const Icon(Icons.repeat, color: Colors.white24),
                   ],
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 50),
               ],
             ),
           ),
@@ -144,20 +142,4 @@ class _PlayerScreenState extends State<PlayerScreen> with TickerProviderStateMix
       ),
     );
   }
-}
-
-class SpectrumPainter extends CustomPainter {
-  final double animationValue; final bool isPlaying;
-  SpectrumPainter({required this.animationValue, required this.isPlaying});
-  @override
-  void paint(Canvas canvas, Size size) {
-    var paint = Paint()..color = SonauraColors.accentGold.withOpacity(0.6)..style = PaintingStyle.fill;
-    int bars = 35; double gap = 4.0; double w = (size.width - (bars * gap)) / bars;
-    for (int i = 0; i < bars; i++) {
-      double h = isPlaying ? (math.sin(animationValue * 15 + i) * 15).abs() + 3 : 2.0;
-      canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(i * (w + gap), size.height - h, w, h), const Radius.circular(2)), paint);
-    }
-  }
-  @override
-  bool shouldRepaint(CustomPainter old) => true;
 }
