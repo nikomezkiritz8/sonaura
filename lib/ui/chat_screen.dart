@@ -24,47 +24,45 @@ class _ChatSonauraState extends State<ChatSonaura> {
   final VoiceService _voice = VoiceService();
   bool _isTyping = false;
   bool _isListening = false;
-  bool _autoListenEnabled = true;
+  bool _autoListen = true;
 
   @override
   void initState() {
     super.initState();
-    _iniciarSonauraAutonoma();
+    _bootSonaura();
   }
 
-  void _iniciarSonauraAutonoma() async {
+  void _bootSonaura() async {
     await _voice.init();
-    _agregarMensajeSonaura("Sistema Sonaura listo. Te escucho.");
-    await _voice.hablar("Sistema Sonaura listo. Te escucho.");
-    _activarEscuchaModoHome();
+    _speakAndDisplay("Sistema Sonaura optimizado. Aguardando instrucciones.");
+    _startListeningLoop();
   }
 
-  void _activarEscuchaModoHome() {
-    if (!mounted || _isTyping || _voice.isListening || !_autoListenEnabled) return;
+  void _startListeningLoop() {
+    if (!mounted || _isTyping || !_autoListen) return;
     setState(() => _isListening = true);
-
     _voice.escuchar(
-      onResult: (texto) {
-        setState(() => _controller.text = texto); // Feedback visual en tiempo real
-      },
+      onResult: (t) => setState(() => _controller.text = t),
       onComplete: () {
         if (_controller.text.isNotEmpty) {
-          String finalMsg = _controller.text;
+          String val = _controller.text;
           _controller.clear();
-          _procesarEntrada(finalMsg);
+          _handleInput(val);
+        } else {
+          Future.delayed(const Duration(seconds: 1), () => _startListeningLoop());
         }
       }
     );
   }
 
-  void _procesarEntrada(String texto) async {
+  void _handleInput(String text) async {
     setState(() {
-      _messages.add({"role": "user", "text": texto});
+      _messages.add({"role": "user", "text": text});
       _isTyping = true;
       _isListening = false;
     });
 
-    String response = await _ai.preguntar(texto);
+    String response = await _ai.preguntar(text);
     if (!mounted) return;
 
     setState(() {
@@ -72,38 +70,38 @@ class _ChatSonauraState extends State<ChatSonaura> {
       _isTyping = false;
     });
 
+    // 1. Sonaura habla (Voz profesional)
     await _voice.hablar(response);
-    _verificarComandos(response, texto);
 
-    if (_autoListenEnabled) {
-      Future.delayed(const Duration(milliseconds: 500), () => _activarEscuchaModoHome());
-    }
-  }
-
-  void _verificarComandos(String response, String promptOriginal) {
+    // 2. Ejecución Inteligente
     if (response.contains("[SEARCH_ALBUM:")) {
-      String q = response.split("[SEARCH_ALBUM:")[1].split("]")[0].trim();
-      _buscar(q, true);
+      _execSearch(response.split("[SEARCH_ALBUM:")[1].split("]")[0], true);
     } else if (response.contains("[SEARCH_TRACK:")) {
-      String q = response.split("[SEARCH_TRACK:")[1].split("]")[0].trim();
-      _buscar(q, false);
-    } else if (promptOriginal.toLowerCase().contains("biblioteca")) {
-      Navigator.push(context, MaterialPageRoute(builder: (c) => LibraryScreen(appId: widget.appId, appSecret: widget.appSecret, token: widget.token)));
+      _execSearch(response.split("[SEARCH_TRACK:")[1].split("]")[0], false);
+    } else if (response.contains("[OPEN_LIBRARY]") || text.toLowerCase().contains("biblioteca")) {
+      _navToLibrary();
     }
+
+    if (_autoListen) _startListeningLoop();
   }
 
-  void _buscar(String q, bool isAlbum) async {
+  void _execSearch(String q, bool isAlbum) async {
     final qobuz = QobuzService(appId: widget.appId, appSecret: widget.appSecret, userAuthToken: widget.token);
     if (isAlbum) {
-      var res = await qobuz.searchAlbums(q);
+      var res = await qobuz.searchAlbums(q.trim());
       if (res.isNotEmpty) Navigator.push(context, MaterialPageRoute(builder: (c) => AlbumResultsScreen(albums: res, appId: widget.appId, appSecret: widget.appSecret, token: widget.token)));
     } else {
-      var res = await qobuz.search(q);
+      var res = await qobuz.search(q.trim());
       if (res.isNotEmpty) Navigator.push(context, MaterialPageRoute(builder: (c) => SearchResultsScreen(tracks: res, appId: widget.appId, appSecret: widget.appSecret, token: widget.token)));
     }
   }
 
-  void _agregarMensajeSonaura(String t) => setState(() => _messages.add({"role": "sonaura", "text": t}));
+  void _navToLibrary() => Navigator.push(context, MaterialPageRoute(builder: (c) => LibraryScreen(appId: widget.appId, appSecret: widget.appSecret, token: widget.token)));
+
+  void _speakAndDisplay(String t) {
+    setState(() => _messages.add({"role": "sonaura", "text": t}));
+    _voice.hablar(t);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -111,29 +109,31 @@ class _ChatSonauraState extends State<ChatSonaura> {
       backgroundColor: SonauraColors.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent, elevation: 0,
-        title: const Text("SONAURA HOME", style: TextStyle(fontSize: 10, letterSpacing: 4, color: SonauraColors.accentGold)),
+        title: const Text("SONAURA INTELLIGENCE", style: TextStyle(fontSize: 10, letterSpacing: 5, fontWeight: FontWeight.bold, color: SonauraColors.accentGold)),
         centerTitle: true,
         actions: [
-          IconButton(icon: Icon(Icons.inventory_2_outlined, color: SonauraColors.accentGold), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LibraryScreen(appId: widget.appId, appSecret: widget.appSecret, token: widget.token)))),
-          IconButton(icon: Icon(_autoListenEnabled ? Icons.sensors : Icons.sensors_off, color: _autoListenEnabled ? Colors.white30 : Colors.red), onPressed: () => setState(() => _autoListenEnabled = !_autoListenEnabled)),
+          IconButton(icon: Icon(Icons.inventory_2_outlined, color: SonauraColors.accentGold, size: 20), onPressed: _navToLibrary),
+          IconButton(icon: Icon(_autoListen ? Icons.sensors : Icons.sensors_off, color: _autoListen ? Colors.greenAccent : Colors.red, size: 20), onPressed: () => setState(() => _autoListen = !_autoListen)),
         ],
       ),
       body: Column(
         children: [
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.all(30),
+              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
               itemCount: _messages.length,
               itemBuilder: (context, index) {
                 final m = _messages[index];
                 bool isUser = m["role"] == "user";
                 return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
                   child: Column(
                     crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                     children: [
-                      Text(isUser ? "TÚ" : "SONAURA", style: TextStyle(fontSize: 8, color: SonauraColors.accentGold.withOpacity(0.5))),
-                      Text(m["text"]!.replaceAll(RegExp(r'\[.*?\]'), '').trim(), style: TextStyle(fontSize: 18, color: isUser ? Colors.white70 : Colors.white, fontStyle: isUser ? FontStyle.normal : FontStyle.italic)),
+                      Text(isUser ? "USUARIO" : "SONAURA CORE", style: TextStyle(fontSize: 7, color: SonauraColors.accentGold.withOpacity(0.5), letterSpacing: 2)),
+                      const SizedBox(height: 6),
+                      Text(m["text"]!.replaceAll(RegExp(r'\[.*?\]'), '').trim(), 
+                           style: TextStyle(fontSize: 17, height: 1.5, color: isUser ? Colors.white60 : Colors.white, fontStyle: isUser ? FontStyle.normal : FontStyle.italic)),
                     ],
                   ),
                 );
@@ -142,15 +142,20 @@ class _ChatSonauraState extends State<ChatSonaura> {
           ),
           if (_isTyping) const LinearProgressIndicator(color: SonauraColors.accentGold, backgroundColor: Colors.transparent),
           Container(
-            padding: const EdgeInsets.fromLTRB(30, 10, 30, 40),
+            padding: const EdgeInsets.fromLTRB(30, 20, 30, 40),
             decoration: const BoxDecoration(color: SonauraColors.surface, borderRadius: BorderRadius.vertical(top: Radius.circular(40))),
             child: Column(
               children: [
-                if (_isListening) const Padding(padding: EdgeInsets.only(bottom: 10), child: Text("Sonaura escuchando...", style: TextStyle(color: SonauraColors.accentGold, fontSize: 10))),
+                if (_isListening) const Padding(padding: EdgeInsets.only(bottom: 15), child: Text("Sonaura analizando ambiente...", style: TextStyle(color: SonauraColors.accentGold, fontSize: 10, letterSpacing: 2))),
                 Row(
                   children: [
-                    Expanded(child: TextField(controller: _controller, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: "Escribe o habla...", border: InputBorder.none))),
-                    Icon(_isListening ? Icons.graphic_eq : Icons.mic_none, color: _isListening ? Colors.red : SonauraColors.accentGold, size: 28),
+                    Expanded(child: TextField(controller: _controller, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w300), decoration: const InputDecoration(hintText: "Comando de voz o texto...", border: InputBorder.none))),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: _isListening ? Colors.red : SonauraColors.accentGold.withOpacity(0.1)), boxShadow: _isListening ? [BoxShadow(color: Colors.red.withOpacity(0.2), blurRadius: 20)] : []),
+                      child: Icon(_isListening ? Icons.graphic_eq : Icons.mic_none, color: _isListening ? Colors.red : SonauraColors.accentGold, size: 28),
+                    ),
                   ],
                 ),
               ],
