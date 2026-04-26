@@ -1,0 +1,39 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+android {
+    namespace "com.example.sonaura"
+    compileSdk 34
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    defaultConfig {
+        applicationId "com.example.sonaura"
+        minSdkVersion flutter.minSdkVersion
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.debug // Usamos debug para no necesitar llaves ahora
+            minifyEnabled false
+            shrinkResources false
+        }
+    }
+}
+
+dependencies {
+    // No hace falta añadir kotlin-stdlib aquí, ya lo hace el plugin
+}
