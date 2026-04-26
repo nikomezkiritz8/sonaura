@@ -6,25 +6,26 @@ class SonauraTrack {
   final String quality;
   final int sampleRate;
   final int bitDepth;
-  final bool isLocal; // Nuevo
+  final bool isLocal;
 
   SonauraTrack({
-    required this.id, 
-    required this.title, 
-    required this.artist, 
-    required this.coverUrl,
-    required this.quality,
-    required this.sampleRate,
-    required this.bitDepth,
-    this.isLocal = false, // Por defecto es streaming
+    required this.id, required this.title, required this.artist, 
+    required this.coverUrl, required this.quality, required this.sampleRate, 
+    required this.bitDepth, this.isLocal = false,
   });
+
+  String get cleanTitle {
+    return title
+        .replaceAll(RegExp(r'\.flac$', caseSensitive: false), '')
+        .replaceAll(RegExp(r'^\d+\s*[-\s]*'), '')
+        .trim();
+  }
 
   factory SonauraTrack.fromJson(Map<String, dynamic> json, {String? defaultCover}) {
     String cover = defaultCover ?? "";
     if (json['album'] != null && json['album']['image'] != null) {
       cover = json['album']['image']['large'] ?? cover;
     }
-
     return SonauraTrack(
       id: json['id']?.toString() ?? "0",
       title: json['title'] ?? "Título desconocido",

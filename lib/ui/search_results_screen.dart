@@ -5,8 +5,6 @@ import 'player_screen.dart';
 
 class SearchResultsScreen extends StatelessWidget {
   final List<SonauraTrack> tracks;
-  
-  // Necesitamos recibir las credenciales para pasarlas al reproductor
   final String appId;
   final String appSecret;
   final String token;
@@ -26,7 +24,10 @@ class SearchResultsScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        iconTheme: const IconThemeData(color: SonauraColors.accentGold, size: 20),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, size: 20, color: Colors.white38),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: const Text(
           "GALERÍA DE ALTA RESOLUCIÓN", 
           style: TextStyle(fontSize: 10, letterSpacing: 3, color: Colors.white38)
@@ -36,8 +37,8 @@ class SearchResultsScreen extends StatelessWidget {
       body: GridView.builder(
         padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 20),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,           // 2 columnas como en las apps de diseño
-          childAspectRatio: 0.65,      // Espacio para la carátula + textos
+          crossAxisCount: 2,           
+          childAspectRatio: 0.65,      
           crossAxisSpacing: 25,
           mainAxisSpacing: 25,
         ),
@@ -47,12 +48,14 @@ class SearchResultsScreen extends StatelessWidget {
           
           return GestureDetector(
             onTap: () {
-              // Al pulsar, vamos al reproductor con todos los datos necesarios
+              // NAVEGACIÓN PRO: Ahora enviamos toda la lista de búsqueda (playlist)
+              // y el índice de la canción que el usuario ha tocado.
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (context) => PlayerScreen(
-                    track: track,
+                    playlist: tracks,      // La lista completa de resultados
+                    initialIndex: index,   // La posición actual
                     appId: appId,
                     appSecret: appSecret,
                     token: token,
@@ -63,12 +66,12 @@ class SearchResultsScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Carátula con sombra y bordes finos
+                // Carátula con sombra audiófila
                 Expanded(
                   child: Container(
                     decoration: BoxDecoration(
                       color: SonauraColors.surface,
-                      borderRadius: BorderRadius.circular(2),
+                      borderRadius: BorderRadius.circular(4),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withOpacity(0.4),
@@ -85,14 +88,14 @@ class SearchResultsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 15),
                 
-                // Título de la pista (Estilo elegante)
+                // TÍTULO LIMPIO (Sin 01 ni .flac)
                 Text(
-                  track.title, 
+                  track.cleanTitle, 
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontWeight: FontWeight.w500, 
-                    fontSize: 15, 
+                    fontSize: 14, 
                     color: Colors.white,
                     fontStyle: FontStyle.italic
                   )
@@ -100,7 +103,7 @@ class SearchResultsScreen extends StatelessWidget {
                 
                 const SizedBox(height: 4),
                 
-                // Artista (En mayúsculas minimalistas)
+                // Artista
                 Text(
                   track.artist.toUpperCase(), 
                   maxLines: 1,
@@ -114,11 +117,11 @@ class SearchResultsScreen extends StatelessWidget {
                 
                 const SizedBox(height: 8),
                 
-                // Etiqueta técnica (Lo que nos diferencia de Apple Music)
+                // Badge técnico de resolución
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    border: Border.all(color: SonauraColors.accentGold.withOpacity(0.5), width: 0.5),
+                    border: Border.all(color: SonauraColors.accentGold.withOpacity(0.4), width: 0.5),
                   ),
                   child: Text(
                     "${track.quality} | ${track.bitDepth}-BIT", 
