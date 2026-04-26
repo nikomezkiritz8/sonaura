@@ -20,16 +20,22 @@ class LibraryScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: SonauraColors.background,
+      extendBodyBehindAppBar: true, // Para que el contenido suba hasta arriba
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 20, color: Colors.white38),
+          icon: const Icon(Icons.arrow_back_ios_new, size: 20, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          "LOCAL VAULT", 
-          style: TextStyle(fontSize: 10, letterSpacing: 3, color: SonauraColors.accentGold)
+          "NIKO VAULT",
+          style: TextStyle(
+            fontSize: 12, 
+            letterSpacing: 5, 
+            fontWeight: FontWeight.w900, 
+            color: SonauraColors.accentGold
+          ),
         ),
         centerTitle: true,
       ),
@@ -40,59 +46,113 @@ class LibraryScreen extends StatelessWidget {
             return const Center(child: CircularProgressIndicator(color: SonauraColors.accentGold, strokeWidth: 1));
           }
           
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(
-              child: Text("No se encontraron archivos en /NIKO/MUSIKK", 
-              style: TextStyle(color: Colors.white24, fontSize: 12))
-            );
+          final tracks = snapshot.data ?? [];
+          if (tracks.isEmpty) {
+            return const Center(child: Text("Vault vacío o disco no montado", style: TextStyle(color: Colors.white24)));
           }
 
-          final tracks = snapshot.data!;
-
-          return ListView.builder(
-            itemCount: tracks.length,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 20),
-            itemBuilder: (context, index) {
-              final track = tracks[index];
-              
-              return ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
-                leading: Container(
-                  width: 45,
-                  height: 45,
-                  decoration: BoxDecoration(
-                    color: SonauraColors.surface,
-                    borderRadius: BorderRadius.circular(4),
+          return CustomScrollView(
+            slivers: [
+              // HEADER DECORATIVO
+              SliverToBoxAdapter(
+                child: Container(
+                  padding: const EdgeInsets.only(top: 120, left: 30, right: 30, bottom: 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("Tu Colección Privada", style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 32)),
+                      const SizedBox(height: 10),
+                      Text(
+                        "${tracks.length} PISTAS EN ALTA FIDELIDAD",
+                        style: const TextStyle(color: SonauraColors.accentGold, fontSize: 9, letterSpacing: 2, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 20),
+                      Container(height: 0.5, color: Colors.white10),
+                    ],
                   ),
-                  child: const Icon(Icons.music_note, color: SonauraColors.accentGold, size: 20),
                 ),
-                // Usamos cleanTitle para que en la lista tampoco salga el .flac ni el 01
-                title: Text(
-                  track.cleanTitle, 
-                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)
+              ),
+              // GRID DE CARÁTULAS (Lo que lo hace visual)
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 20),
+                sliver: SliverGrid(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 25,
+                    crossAxisSpacing: 25,
+                    childAspectRatio: 0.72,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final track = tracks[index];
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => PlayerScreen(
+                            playlist: tracks,
+                            initialIndex: index,
+                            appId: appId,
+                            appSecret: appSecret,
+                            token: token,
+                          )));
+                        },
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // CARÁTULA CON SOMBRA Y PROFUNDIDAD
+                            Expanded(
+                              child: Hero(
+                                tag: track.id,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(8),
+                                    color: SonauraColors.surface,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.5),
+                                        blurRadius: 15,
+                                        offset: const Offset(0, 8),
+                                      )
+                                    ],
+                                    image: DecorationImage(
+                                      image: NetworkImage(track.coverUrl),
+                                      fit: BoxFit.cover,
+                                      // Filtro por si la imagen falla
+                                      onError: (e, s) => const Icon(Icons.music_note, color: Colors.white10),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            // TEXTO LIMPIO Y ELEGANTE
+                            Text(
+                              track.cleanTitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600, fontStyle: FontStyle.italic),
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                const Text("FLAC", style: TextStyle(color: SonauraColors.accentGold, fontSize: 8, fontWeight: FontWeight.bold)),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    "SOURCE: NIKO",
+                                    style: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 8, letterSpacing: 1),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    childCount: tracks.length,
+                  ),
                 ),
-                subtitle: Text(
-                  "${track.quality} | SOURCE: NIKO", 
-                  style: const TextStyle(color: Colors.white24, fontSize: 9, letterSpacing: 1)
-                ),
-                trailing: const Icon(Icons.more_vert, color: Colors.white10, size: 18),
-                onTap: () {
-                  // NAVEGACIÓN PRO: Enviamos la lista completa y la posición actual
-                  Navigator.push(
-                    context, 
-                    MaterialPageRoute(
-                      builder: (context) => PlayerScreen(
-                        playlist: tracks,      // Pasamos toda la carpeta MUSIKK
-                        initialIndex: index,   // Canción específica pulsada
-                        appId: appId,
-                        appSecret: appSecret,
-                        token: token,
-                      )
-                    )
-                  );
-                },
-              );
-            },
+              ),
+            ],
           );
         },
       ),
