@@ -14,8 +14,7 @@ class VoiceService {
     if (Platform.isLinux) return false;
     await Permission.microphone.request();
     await _tts.setLanguage("es-ES");
-    await _tts.setSpeechRate(0.5);
-    // IMPORTANTE: Permitimos que las funciones esperen a que termine de hablar
+    await _tts.setSpeechRate(0.48);
     await _tts.awaitSpeakCompletion(true);
 
     return await _speech.initialize(
@@ -30,23 +29,21 @@ class VoiceService {
     await _speech.listen(
       onResult: (val) {
         onResult(val.recognizedWords);
+        // Solo disparamos el completado si Google está 100% seguro de que terminaste
         if (val.finalResult) {
           onComplete();
         }
       },
       localeId: 'es_ES',
-      listenFor: const Duration(seconds: 30),
-      pauseFor: const Duration(seconds: 2),
-      listenMode: ListenMode.confirmation,
+      listenFor: const Duration(seconds: 60), // Máximo un minuto escuchando
+      pauseFor: const Duration(seconds: 5),  // ESPERA 5 SEGUNDOS DE SILENCIO (Para que no te corte)
+      listenMode: ListenMode.dictation,        // MODO DICTADO: Más preciso y paciente
+      cancelOnError: false,
     );
   }
 
   void detenerEscucha() async => await _speech.stop();
-
-  // --- NUEVA FUNCIÓN: DETENER HABLA ---
-  Future<void> detenerHabla() async {
-    await _tts.stop();
-  }
+  Future<void> detenerHabla() async => await _tts.stop();
 
   Future<void> hablar(String texto) async {
     if (Platform.isLinux) return;

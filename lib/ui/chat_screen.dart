@@ -23,7 +23,7 @@ class _ChatSonauraState extends State<ChatSonaura> {
   final SonauraAI _ai = SonauraAI();
   final VoiceService _voice = VoiceService();
   bool _isTyping = false;
-  bool _isListening = false;
+  bool _isActivated = false; // ¿Ha escuchado "Sonaura"?
   bool _autoListen = true;
 
   @override
@@ -34,22 +34,35 @@ class _ChatSonauraState extends State<ChatSonaura> {
 
   void _bootSonaura() async {
     await _voice.init();
-    _speakAndDisplay("Sistema Sonaura optimizado. Aguardando instrucciones.");
+    _speakAndDisplay("Sistema Sonaura listo. Di 'Hey Sonaura' para activarme.");
     _startListeningLoop();
   }
 
   void _startListeningLoop() {
     if (!mounted || _isTyping || !_autoListen) return;
-    setState(() => _isListening = true);
+    
     _voice.escuchar(
-      onResult: (t) => setState(() => _controller.text = t),
+      onResult: (t) {
+        setState(() => _controller.text = t);
+        // LÓGICA WAKE WORD
+        if (t.toLowerCase().contains("sonaura") && !_isActivated) {
+          setState(() => _isActivated = true);
+        }
+      },
       onComplete: () {
         if (_controller.text.isNotEmpty) {
           String val = _controller.text;
           _controller.clear();
-          _handleInput(val);
+          
+          if (_isActivated || val.toLowerCase().contains("sonaura")) {
+             setState(() => _isActivated = false);
+             _handleInput(val);
+          } else {
+             // Si habló pero no dijo Sonaura, volvemos a escuchar en silencio
+             _startListeningLoop();
+          }
         } else {
-          Future.delayed(const Duration(seconds: 1), () => _startListeningLoop());
+          Future.delayed(const Duration(milliseconds: 500), () => _startListeningLoop());
         }
       }
     );
@@ -59,7 +72,6 @@ class _ChatSonauraState extends State<ChatSonaura> {
     setState(() {
       _messages.add({"role": "user", "text": text});
       _isTyping = true;
-      _isListening = false;
     });
 
     String response = await _ai.preguntar(text);
@@ -81,8 +93,8 @@ class _ChatSonauraState extends State<ChatSonaura> {
       _execSearch(response.split("[SEARCH_ALBUM:")[1].split("]")[0], true);
     } else if (response.contains("[SEARCH_TRACK:")) {
       _execSearch(response.split("[SEARCH_TRACK:")[1].split("]")[0], false);
-    } else if (response.contains("[OPEN_LIBRARY]") || text.toLowerCase().contains("biblioteca")) {
-      _navToLibrary();
+    } else if (text.toLowerCase().contains("biblioteca")) {
+      Navigator.push(context, MaterialPageRoute(builder: (c) => LibraryScreen(appId: widget.appId, appSecret: widget.appSecret, token: widget.token)));
     }
   }
 
@@ -97,8 +109,6 @@ class _ChatSonauraState extends State<ChatSonaura> {
     }
   }
 
-  void _navToLibrary() => Navigator.push(context, MaterialPageRoute(builder: (c) => LibraryScreen(appId: widget.appId, appSecret: widget.appSecret, token: widget.token)));
-
   void _speakAndDisplay(String t) {
     setState(() => _messages.add({"role": "sonaura", "text": t}));
     _voice.hablar(t);
@@ -110,11 +120,11 @@ class _ChatSonauraState extends State<ChatSonaura> {
       backgroundColor: SonauraColors.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent, elevation: 0,
-        title: const Text("SONAURA INTELLIGENCE", style: TextStyle(fontSize: 10, letterSpacing: 5, fontWeight: FontWeight.bold, color: SonauraColors.accentGold)),
+        title: Text(_isActivated ? "ESCUCHANDO..." : "MODO VIGILANTE", style: TextStyle(fontSize: 10, letterSpacing: 4, color: _isActivated ? Colors.red : SonauraColors.accentGold)),
         centerTitle: true,
         actions: [
-          IconButton(icon: Icon(Icons.inventory_2_outlined, color: SonauraColors.accentGold, size: 20), onPressed: _navToLibrary),
-          IconButton(icon: Icon(_autoListen ? Icons.sensors : Icons.sensors_off, color: _autoListen ? Colors.greenAccent : Colors.red, size: 20), onPressed: () => setState(() => _autoListen = !_autoListen)),
+          IconButton(icon: const Icon(Icons.volume_off, color: Colors.white24, size: 20), onPressed: () => _voice.detenerHabla()),
+          IconButton(icon: Icon(Icons.inventory_2_outlined, color: SonauraColors.accentGold, size: 20), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LibraryScreen(appId: widget.appId, appSecret: widget.appSecret, token: widget.token)))),
         ],
       ),
       body: Column(
@@ -127,14 +137,12 @@ class _ChatSonauraState extends State<ChatSonaura> {
                 final m = _messages[index];
                 bool isUser = m["role"] == "user";
                 return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
                   child: Column(
                     crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                     children: [
-                      Text(isUser ? "USUARIO" : "SONAURA CORE", style: TextStyle(fontSize: 7, color: SonauraColors.accentGold.withOpacity(0.5), letterSpacing: 2)),
-                      const SizedBox(height: 6),
-                      Text(m["text"]!.replaceAll(RegExp(r'\[.*?\]'), '').trim(), 
-                           style: TextStyle(fontSize: 17, height: 1.5, color: isUser ? Colors.white60 : Colors.white, fontStyle: isUser ? FontStyle.normal : FontStyle.italic)),
+                      Text(isUser ? "USUARIO" : "SONAURA", style: TextStyle(fontSize: 8, color: SonauraColors.accentGold.withOpacity(0.5))),
+                      Text(m["text"]!.replaceAll(RegExp(r'\[.*?\]'), '').trim(), style: TextStyle(fontSize: 18, color: isUser ? Colors.white70 : Colors.white, fontStyle: isUser ? FontStyle.normal : FontStyle.italic)),
                     ],
                   ),
                 );
@@ -143,32 +151,25 @@ class _ChatSonauraState extends State<ChatSonaura> {
           ),
           if (_isTyping) const LinearProgressIndicator(color: SonauraColors.accentGold, backgroundColor: Colors.transparent),
           
-          // --- ÁREA DE CONTROL INFERIOR ---
           Container(
             padding: const EdgeInsets.fromLTRB(30, 20, 30, 40),
             decoration: const BoxDecoration(color: SonauraColors.surface, borderRadius: BorderRadius.vertical(top: Radius.circular(40))),
             child: Column(
               children: [
-                if (_isListening) const Padding(padding: EdgeInsets.only(bottom: 15), child: Text("Sonaura analizando ambiente...", style: TextStyle(color: SonauraColors.accentGold, fontSize: 10, letterSpacing: 2))),
                 Row(
                   children: [
-                    Expanded(child: TextField(controller: _controller, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w300), decoration: const InputDecoration(hintText: "Comando de voz o texto...", border: InputBorder.none))),
+                    Expanded(child: TextField(controller: _controller, style: const TextStyle(color: Colors.white), decoration: InputDecoration(hintText: _isActivated ? "Te escucho..." : "Di 'Sonaura'...", border: InputBorder.none))),
                     
-                    // BOTÓN PARA HACER CALLAR A LA IA
-                    if (!_isListening) 
-                      IconButton(
-                        icon: const Icon(Icons.volume_off_rounded, color: Colors.white24, size: 24),
-                        onPressed: () => _voice.detenerHabla(),
-                        tooltip: "Silenciar voz de Sonaura",
-                      ),
-
-                    const SizedBox(width: 10),
-
+                    // BOTÓN VISUAL WAKE WORD
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 300),
                       padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: _isListening ? Colors.red : SonauraColors.accentGold.withOpacity(0.1)), boxShadow: _isListening ? [BoxShadow(color: Colors.red.withOpacity(0.2), blurRadius: 20)] : []),
-                      child: Icon(_isListening ? Icons.graphic_eq : Icons.mic_none, color: _isListening ? Colors.red : SonauraColors.accentGold, size: 28),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle, 
+                        border: Border.all(color: _isActivated ? Colors.red : Colors.white10),
+                        boxShadow: _isActivated ? [BoxShadow(color: Colors.red.withOpacity(0.5), blurRadius: 20)] : []
+                      ),
+                      child: Icon(_isActivated ? Icons.graphic_eq : Icons.mic_none, color: _isActivated ? Colors.red : Colors.white24, size: 28),
                     ),
                   ],
                 ),
