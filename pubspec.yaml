@@ -12,6 +12,7 @@ dependencies:
   http: ^1.1.0
   crypto: ^3.0.3
   google_fonts: ^6.1.0
+  just_audio: ^0.9.36
   audioplayers: ^5.2.1
   flutter_tts: ^3.8.3
   speech_to_text: ^6.1.1
