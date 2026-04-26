@@ -19,13 +19,13 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.6' # Versión fija para evitar el bug del SDK
+          flutter-version: '3.19.6'
           
       - name: Get Dependencies
         run: flutter pub get
         
       - name: Build APK
-        run: flutter build apk --release --android-skip-build-dependency-validation
+        run: flutter build apk --release
         
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
