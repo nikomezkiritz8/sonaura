@@ -3,8 +3,10 @@ import '../services/sonaura_ai.dart';
 import '../services/voice_service.dart';
 import '../services/qobuz_service.dart'; 
 import '../models/track_model.dart';
+import '../models/album_model.dart'; // Asegúrate de haber creado este modelo
 import 'sonaura_style.dart';
 import 'search_results_screen.dart'; 
+import 'album_results_screen.dart'; // Nueva pantalla para discografías
 
 class ChatSonaura extends StatefulWidget {
   final String appId;
@@ -37,11 +39,9 @@ class _ChatSonauraState extends State<ChatSonaura> {
   }
 
   void _inicializarServicios() async {
-    // Inicializamos el motor de voz al arrancar
     await _voice.init();
   }
 
-  // Lógica para enviar texto a Ollama
   void _procesarEntrada(String texto) async {
     if (texto.isEmpty) return;
 
@@ -59,20 +59,23 @@ class _ChatSonauraState extends State<ChatSonaura> {
       _isTyping = false;
     });
 
-    // Sonaura responde con voz
     _voice.hablar(response);
 
-    // Lógica de búsqueda musical
+    // ANALIZADOR DE INTENCIÓN MEJORADO
     String promptLower = texto.toLowerCase();
-    List<String> keywords = ["busca", "pon", "reproduce", "encuentra", "escuchar", "play"];
+    List<String> keywords = ["busca", "pon", "reproduce", "encuentra", "escuchar", "play", "album"];
+    
     if (keywords.any((key) => promptLower.contains(key))) {
       _ejecutarBusquedaMusical(texto);
     }
   }
 
   void _ejecutarBusquedaMusical(String texto) async {
+    final String promptLower = texto.toLowerCase();
+    
+    // Limpiamos el texto para obtener solo el artista/álbum
     String query = texto
-        .replaceAll(RegExp(r'(busca|pon|reproduce|escuchar|encuentra|oír|quiero escuchar|toca|play)'), '')
+        .replaceAll(RegExp(r'(busca|pon|reproduce|escuchar|encuentra|oír|quiero escuchar|toca|play|album de|album del|album)', caseSensitive: false), '')
         .trim();
 
     if (query.isEmpty) return;
@@ -84,22 +87,41 @@ class _ChatSonauraState extends State<ChatSonaura> {
     );
 
     try {
-      List<SonauraTrack> resultados = await qobuz.search(query);
-      if (resultados.isNotEmpty && mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => SearchResultsScreen(
-              tracks: resultados,
-              appId: widget.appId,
-              appSecret: widget.appSecret,
-              token: widget.token,
+      // SI EL USUARIO MENCIONA "ALBUM", BUSCAMOS DISCOGRAFÍAS
+      if (promptLower.contains("album")) {
+        List<SonauraAlbum> albums = await qobuz.searchAlbums(query);
+        if (albums.isNotEmpty && mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => AlbumResultsScreen(
+                albums: albums,
+                appId: widget.appId,
+                appSecret: widget.appSecret,
+                token: widget.token,
+              ),
             ),
-          ),
-        );
+          );
+        }
+      } else {
+        // BÚSQUEDA NORMAL DE CANCIONES
+        List<SonauraTrack> resultados = await qobuz.search(query);
+        if (resultados.isNotEmpty && mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SearchResultsScreen(
+                tracks: resultados,
+                appId: widget.appId,
+                appSecret: widget.appSecret,
+                token: widget.token,
+              ),
+            ),
+          );
+        }
       }
     } catch (e) {
-      debugPrint("Error Qobuz: $e");
+      debugPrint("Error en búsqueda Sonaura: $e");
     }
   }
 
@@ -119,7 +141,7 @@ class _ChatSonauraState extends State<ChatSonaura> {
             const Text("SONAURA INTELLIGENCE", 
                 style: TextStyle(fontSize: 10, letterSpacing: 4, color: SonauraColors.accentGold, fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
-            Text("NEURAL LINK ACTIVE", 
+            Text(_isListening ? "LISTENING..." : "NEURAL LINK ACTIVE", 
                 style: TextStyle(fontSize: 7, color: _isListening ? Colors.red : Colors.white.withOpacity(0.2), letterSpacing: 2)),
           ],
         ),
@@ -139,7 +161,7 @@ class _ChatSonauraState extends State<ChatSonaura> {
                   child: Column(
                     crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                     children: [
-                      Text(isUser ? "USER_INPUT" : "SONAURA_RESPONSE", 
+                      Text(isUser ? "USER_PROMPT" : "SONAURA_CORE", 
                           style: TextStyle(fontSize: 8, color: SonauraColors.accentGold.withOpacity(0.5), letterSpacing: 2)),
                       const SizedBox(height: 10),
                       Text(
@@ -165,7 +187,6 @@ class _ChatSonauraState extends State<ChatSonaura> {
               child: LinearProgressIndicator(color: SonauraColors.accentGold, backgroundColor: Colors.transparent, minHeight: 1),
             ),
 
-          // ÁREA DE ENTRADA
           Container(
             padding: const EdgeInsets.only(left: 30, right: 30, bottom: 40, top: 20),
             decoration: const BoxDecoration(
@@ -190,10 +211,8 @@ class _ChatSonauraState extends State<ChatSonaura> {
                   ),
                 ),
                 
-                // BOTÓN DE MICRÓFONO REPARADO
                 GestureDetector(
                   onLongPressStart: (_) async {
-                    // Vibración táctil para confirmar inicio
                     setState(() => _isListening = true);
                     _voice.escuchar((res) {
                       setState(() => _controller.text = res);
@@ -202,10 +221,7 @@ class _ChatSonauraState extends State<ChatSonaura> {
                   onLongPressEnd: (_) async {
                     setState(() => _isListening = false);
                     _voice.detener();
-                    
-                    // Pequeña espera para que el motor termine de procesar la última palabra
-                    await Future.delayed(const Duration(milliseconds: 500));
-                    
+                    await Future.delayed(const Duration(milliseconds: 600));
                     if (_controller.text.isNotEmpty) {
                       _procesarEntrada(_controller.text);
                       _controller.clear();
