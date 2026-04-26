@@ -38,6 +38,7 @@ class _PlayerScreenState extends State<PlayerScreen> with TickerProviderStateMix
   }
 
   void _prepararAudio() async {
+    if (!mounted) return;
     setState(() => _isBuffering = true);
     final track = widget.playlist[_currentIndex];
     try {
@@ -56,8 +57,10 @@ class _PlayerScreenState extends State<PlayerScreen> with TickerProviderStateMix
     String response = await _ai.preguntar("Haz un análisis audiófilo de esta pieza.", metadata: metadata);
     _voice.hablar(response);
     
+    if (!mounted) return;
     showModalBottomSheet(
-      context: context, backgroundColor: Colors.black90,
+      context: context, 
+      backgroundColor: Colors.black.withOpacity(0.9), // CORREGIDO AQUÍ
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
       builder: (context) => Container(padding: const EdgeInsets.all(30), child: SingleChildScrollView(child: Column(children: [
         const Text("SONAURA INSIGHT", style: TextStyle(color: SonauraColors.accentGold, letterSpacing: 4, fontSize: 10, fontWeight: FontWeight.bold)),
