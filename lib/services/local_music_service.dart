@@ -8,20 +8,20 @@ class LocalMusicService {
   Future<List<SonauraTrack>> getLocalTracks() async {
     List<SonauraTrack> tracks = [];
     try {
-      final response = await http.get(Uri.parse('$serverUrl/list')).timeout(const Duration(seconds: 15));
+      final response = await http.get(Uri.parse('$serverUrl/list'));
       
       if (response.statusCode == 200) {
         List data = jsonDecode(response.body);
         for (var item in data) {
-          // Codificamos el path para que los espacios y caracteres especiales funcionen en la URL
-          String encodedPath = Uri.encodeComponent(item['path']);
+          // Usamos Uri.encodeFull para mantener las barras de las carpetas /
+          String fullUrl = "$serverUrl/file/${Uri.encodeFull(item['path'])}";
           
           tracks.add(SonauraTrack(
-            id: "$serverUrl/file/$encodedPath", 
+            id: fullUrl, 
             title: item['title'],
-            artist: "Disco NIKO",
+            artist: "Local Vault",
             coverUrl: "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=500",
-            quality: item['path'].toString().toLowerCase().endsWith('.flac') ? "REMOTE FLAC" : "REMOTE AUDIO",
+            quality: item['path'].toString().toLowerCase().endsWith('.flac') ? "HI-RES" : "AUDIO",
             sampleRate: 44, 
             bitDepth: 16, 
             isLocal: true,
@@ -29,7 +29,7 @@ class LocalMusicService {
         }
       }
     } catch (e) { 
-      print("Sonaura Remote Vault Error: $e"); 
+      print("Sonaura Error: $e"); 
     }
     return tracks;
   }
