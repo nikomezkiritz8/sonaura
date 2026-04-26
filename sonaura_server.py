@@ -14,7 +14,7 @@ MUSIC_PATH = "/run/media/koila1998/NIKO/MUSIKK"
 def list_music():
     songs = []
     if not os.path.exists(MUSIC_PATH):
-        return jsonify({"error": "Disco NIKO no montado"}), 404
+        return jsonify([]), 404
         
     for root, dirs, files in os.walk(MUSIC_PATH):
         for file in files:
@@ -22,29 +22,35 @@ def list_music():
                 full_path = os.path.join(root, file)
                 rel_path = os.path.relpath(full_path, MUSIC_PATH)
                 
-                # VALORES POR DEFECTO
+                # Valores por defecto
+                artist = "Unknown"
+                title = file
                 bit_depth = 16
                 sample_rate = 44100
                 
-                # EXTRACCIÓN DE METADATOS REALES
                 try:
                     if file.lower().endswith('.flac'):
                         audio = FLAC(full_path)
+                        # SACAMOS EL ARTISTA REAL
+                        artist = audio.get('artist', ['Unknown Artist'])[0]
+                        title = audio.get('title', [file])[0]
                         bit_depth = audio.info.bits_per_sample
                         sample_rate = audio.info.sample_rate
                     elif file.lower().endswith('.mp3'):
-                        audio = MP3(full_path)
+                        audio = MP3(full_path, ID3=ID3)
+                        artist = audio.get('TPE1', ['Unknown Artist'])[0]
+                        title = audio.get('TIT2', [file])[0]
                         sample_rate = audio.info.sample_rate
-                        bit_depth = 16 # MP3 es técnicamente 16-bit
                 except:
                     pass
 
                 songs.append({
-                    "title": file,
+                    "title": title,
+                    "artist": artist, # <--- CRITICO PARA LAS LETRAS
                     "path": rel_path,
                     "cover": f"art/{rel_path}",
                     "bit_depth": bit_depth,
-                    "sample_rate": sample_rate // 1000 # Lo pasamos a kHz (ej: 44)
+                    "sample_rate": sample_rate // 1000
                 })
     return jsonify(songs)
 
@@ -60,15 +66,10 @@ def get_art(filename):
             audio = FLAC(full_path)
             if audio.pictures:
                 return Response(audio.pictures[0].data, mimetype=audio.pictures[0].mime)
-        elif filename.lower().endswith('.mp3'):
-            audio = MP3(full_path, ID3=ID3)
-            tags = audio.tags.getall("APIC")
-            if tags:
-                return Response(tags[0].data, mimetype=tags[0].mime)
     except:
         pass
     return "No art", 404
 
 if __name__ == '__main__':
-    print("--- Servidor Sonaura: Metadatos Reales Activos ---")
+    print("--- Sonaura Server: Metadata Artist extraction active ---")
     app.run(host='0.0.0.0', port=5050, threaded=True)
