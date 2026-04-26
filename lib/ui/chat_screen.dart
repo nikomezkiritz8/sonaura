@@ -23,14 +23,9 @@ class _ChatSonauraState extends State<ChatSonaura> {
   final SonauraAI _ai = SonauraAI();
   final VoiceService _voice = VoiceService();
   bool _isTyping = false;
+  bool _isListening = false;
   bool _isActivated = false; 
   bool _autoListen = true;
-
-  // LISTA DE ENTRENAMIENTO FONÉTICO
-  final List<String> _wakeWordVariations = [
-    "sonaura", "sonora", "so now", "so now that", "son ahora", 
-    "señora", "son ahora que", "sona", "aura", "hey sonaura"
-  ];
 
   @override
   void initState() {
@@ -40,61 +35,49 @@ class _ChatSonauraState extends State<ChatSonaura> {
 
   void _bootSonaura() async {
     await _voice.init();
-    _speakAndDisplay("Sonaura online. Di mi nombre para activarme.");
+    _agregarMensajeSonaura("Sonaura online. Puedes escribirme o decir mi nombre.");
+    await _voice.hablar("Sonaura online. Puedes escribirme o decir mi nombre.");
     _startListeningLoop();
-  }
-
-  bool _detectWakeWord(String text) {
-    String input = text.toLowerCase();
-    return _wakeWordVariations.any((variation) => input.contains(input));
   }
 
   void _startListeningLoop() {
     if (!mounted || _isTyping || !_autoListen) return;
-    
+    setState(() => _isListening = true);
+
     _voice.escuchar(
-      onResult: (t) {
-        setState(() => _controller.text = t);
-        
-        // ACTIVACIÓN INSTANTÁNEA (SI DETECTA EL NOMBRE O ALGO PARECIDO)
-        if (_detectWakeWord(t) && !_isActivated) {
-          setState(() => _isActivated = true);
-          // Opcional: Podríamos hacer un pequeño sonido de "bip" aquí
-        }
-      },
+      onResult: (t) => setState(() => _controller.text = t),
       onComplete: () {
         String val = _controller.text.trim();
         if (val.isNotEmpty) {
-          if (_isActivated || _detectWakeWord(val)) {
-             setState(() => _isActivated = false);
+          // Si detecta "Sonaura" o variaciones similares se activa
+          if (val.toLowerCase().contains("sonaura") || val.toLowerCase().contains("so now")) {
              _controller.clear();
-             _handleInput(val); // Enviamos la frase a la RTX 4060
+             _handleInput(val);
           } else {
-             // No ha dicho el nombre, ignoramos y seguimos vigilando
              _controller.clear();
              _startListeningLoop();
           }
         } else {
-          // Silencio total, reiniciamos el loop de vigilancia
-          Future.delayed(const Duration(milliseconds: 300), () => _startListeningLoop());
+          Future.delayed(const Duration(milliseconds: 500), () => _startListeningLoop());
         }
       }
     );
   }
 
+  // FUNCIÓN MAESTRA DE ENTRADA (Teclado y Voz)
   void _handleInput(String text) async {
-    // Limpiamos el nombre del comando para que la IA no se líe
-    String cleanInput = text;
-    for (var word in _wakeWordVariations) {
-      cleanInput = cleanInput.toLowerCase().replaceFirst(word, "").trim();
-    }
-
+    if (text.isEmpty) return;
+    
+    // Detenemos la escucha mientras la IA procesa
+    _voice.detenerEscucha();
+    
     setState(() {
       _messages.add({"role": "user", "text": text});
       _isTyping = true;
+      _isListening = false;
     });
 
-    String response = await _ai.preguntar(cleanInput);
+    String response = await _ai.preguntar(text);
     if (!mounted) return;
 
     setState(() {
@@ -103,8 +86,9 @@ class _ChatSonauraState extends State<ChatSonaura> {
     });
 
     await _voice.hablar(response);
-    _execCommands(response, cleanInput);
+    _execCommands(response, text);
 
+    // Reiniciar escucha si el modo automático está puesto
     if (_autoListen) _startListeningLoop();
   }
 
@@ -113,7 +97,7 @@ class _ChatSonauraState extends State<ChatSonaura> {
       _execSearch(response.split("[SEARCH_ALBUM:")[1].split("]")[0], true);
     } else if (response.contains("[SEARCH_TRACK:")) {
       _execSearch(response.split("[SEARCH_TRACK:")[1].split("]")[0], false);
-    } else if (text.toLowerCase().contains("biblioteca")) {
+    } else if (text.toLowerCase().contains("biblioteca") || text.toLowerCase().contains("mi música")) {
       _navToLibrary();
     }
   }
@@ -131,10 +115,7 @@ class _ChatSonauraState extends State<ChatSonaura> {
 
   void _navToLibrary() => Navigator.push(context, MaterialPageRoute(builder: (c) => LibraryScreen(appId: widget.appId, appSecret: widget.appSecret, token: widget.token)));
 
-  void _speakAndDisplay(String t) {
-    setState(() => _messages.add({"role": "sonaura", "text": t}));
-    _voice.hablar(t);
-  }
+  void _agregarMensajeSonaura(String t) => setState(() => _messages.add({"role": "sonaura", "text": t}));
 
   @override
   Widget build(BuildContext context) {
@@ -142,9 +123,17 @@ class _ChatSonauraState extends State<ChatSonaura> {
       backgroundColor: SonauraColors.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent, elevation: 0,
-        title: Text(_isActivated ? "SISTEMA ACTIVO" : "MODO VIGILANTE", 
-            style: TextStyle(fontSize: 10, letterSpacing: 4, color: _isActivated ? Colors.redAccent : Colors.white24)),
+        title: const Text("SONAURA INTELLIGENCE", style: TextStyle(fontSize: 10, letterSpacing: 5, fontWeight: FontWeight.bold, color: SonauraColors.accentGold)),
         centerTitle: true,
+        actions: [
+          // BOTÓN DE BIBLIOTECA (RESTAURADO)
+          IconButton(
+            icon: const Icon(Icons.inventory_2_outlined, color: SonauraColors.accentGold, size: 22), 
+            onPressed: _navToLibrary,
+            tooltip: "Mi Vault Local",
+          ),
+          const SizedBox(width: 10),
+        ],
       ),
       body: Column(
         children: [
@@ -156,12 +145,14 @@ class _ChatSonauraState extends State<ChatSonaura> {
                 final m = _messages[index];
                 bool isUser = m["role"] == "user";
                 return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
                   child: Column(
                     crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                     children: [
-                      Text(isUser ? "USUARIO" : "SONAURA", style: TextStyle(fontSize: 8, color: SonauraColors.accentGold.withOpacity(0.5))),
-                      Text(m["text"]!.replaceAll(RegExp(r'\[.*?\]'), '').trim(), style: TextStyle(fontSize: 18, color: isUser ? Colors.white70 : Colors.white, fontStyle: isUser ? FontStyle.normal : FontStyle.italic)),
+                      Text(isUser ? "TÚ" : "SONAURA", style: TextStyle(fontSize: 7, color: SonauraColors.accentGold.withOpacity(0.5), letterSpacing: 2)),
+                      const SizedBox(height: 6),
+                      Text(m["text"]!.replaceAll(RegExp(r'\[.*?\]'), '').trim(), 
+                           style: TextStyle(fontSize: 18, height: 1.6, color: isUser ? Colors.white60 : Colors.white, fontStyle: isUser ? FontStyle.normal : FontStyle.italic)),
                     ],
                   ),
                 );
@@ -173,24 +164,42 @@ class _ChatSonauraState extends State<ChatSonaura> {
           Container(
             padding: const EdgeInsets.fromLTRB(30, 20, 30, 40),
             decoration: const BoxDecoration(color: SonauraColors.surface, borderRadius: BorderRadius.vertical(top: Radius.circular(40))),
-            child: Column(
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Expanded(child: TextField(controller: _controller, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w200), decoration: InputDecoration(hintText: _isActivated ? "Dime qué necesitas..." : "Di 'Sonaura'...", border: InputBorder.none, hintStyle: const TextStyle(color: Colors.white10)))),
-                    
-                    // ICONO DE ESTADO
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle, 
-                        color: _isActivated ? Colors.red.withOpacity(0.1) : Colors.transparent,
-                        border: Border.all(color: _isActivated ? Colors.red : Colors.white10),
-                      ),
-                      child: Icon(_isActivated ? Icons.mic : Icons.mic_none, color: _isActivated ? Colors.red : Colors.white24, size: 28),
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w300),
+                    // FUNCIÓN: ENVIAR CON ENTER
+                    onSubmitted: (val) {
+                      _handleInput(val);
+                      _controller.clear();
+                    },
+                    decoration: InputDecoration(
+                      hintText: _isListening ? "Te escucho..." : "Escribe o di 'Sonaura'...",
+                      border: InputBorder.none,
+                      hintStyle: const TextStyle(color: Colors.white10),
                     ),
-                  ],
+                  ),
+                ),
+                
+                // BOTÓN SILENCIAR HABLA
+                IconButton(
+                  icon: const Icon(Icons.volume_off, color: Colors.white12),
+                  onPressed: () => _voice.detenerHabla(),
+                ),
+
+                const SizedBox(width: 10),
+
+                // ICONO DINÁMICO MICRO
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle, 
+                    border: Border.all(color: _isListening ? Colors.red : SonauraColors.accentGold.withOpacity(0.1)),
+                  ),
+                  child: Icon(_isListening ? Icons.graphic_eq : Icons.mic_none, color: _isListening ? Colors.red : SonauraColors.accentGold, size: 28),
                 ),
               ],
             ),
