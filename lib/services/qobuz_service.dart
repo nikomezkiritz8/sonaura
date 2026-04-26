@@ -19,7 +19,6 @@ class QobuzService {
     return IOClient(ioc);
   }
 
-  // BUSCAR CANCIONES (TRACKS)
   Future<List<SonauraTrack>> search(String query) async {
     try {
       final response = await _directClient.get(
@@ -31,11 +30,10 @@ class QobuzService {
         List items = data['tracks']['items'];
         return items.map((item) => SonauraTrack.fromJson(item)).toList();
       }
-    } catch (e) { print("Error: $e"); }
+    } catch (e) { print("Error Search: $e"); }
     return [];
   }
 
-  // BUSCAR ÁLBUMES (NUEVO)
   Future<List<SonauraAlbum>> searchAlbums(String query) async {
     try {
       final response = await _directClient.get(
@@ -47,7 +45,36 @@ class QobuzService {
         List items = data['albums']['items'];
         return items.map((item) => SonauraAlbum.fromJson(item)).toList();
       }
-    } catch (e) { print("Error Álbumes: $e"); }
+    } catch (e) { print("Error Album Search: $e"); }
+    return [];
+  }
+
+  // ESTA ES LA FUNCIÓN CORREGIDA
+  Future<List<SonauraTrack>> getAlbumTracks(String albumId) async {
+    try {
+      final response = await _directClient.get(
+        Uri.parse('https://www.qobuz.com/api.json/0.2/album/get?album_id=$albumId'),
+        headers: {'x-user-auth-token': userAuthToken, 'x-app-id': appId},
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        
+        // 1. Extraemos la carátula general del álbum
+        String albumCover = "";
+        if (data['image'] != null) {
+          albumCover = data['image']['large'] ?? "";
+        }
+
+        // 2. Pasamos esa carátula a cada canción
+        if (data['tracks'] != null && data['tracks']['items'] != null) {
+          List items = data['tracks']['items'];
+          return items.map((item) => SonauraTrack.fromJson(item, defaultCover: albumCover)).toList();
+        }
+      }
+    } catch (e) {
+      print("Error Tracks: $e");
+    }
     return [];
   }
 
@@ -64,24 +91,4 @@ class QobuzService {
     } catch (e) { print("Error Stream: $e"); }
     return null;
   }
-  
-  Future<List<SonauraTrack>> getAlbumTracks(String albumId) async {
-  try {
-    final response = await _directClient.get(
-      Uri.parse('https://www.qobuz.com/api.json/0.2/album/get?album_id=$albumId'),
-      headers: {'x-user-auth-token': userAuthToken, 'x-app-id': appId},
-    );
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      if (data['tracks'] != null && data['tracks']['items'] != null) {
-        List items = data['tracks']['items'];
-        return items.map((item) => SonauraTrack.fromJson(item)).toList();
-      }
-    }
-  } catch (e) {
-    print("Error obteniendo canciones del álbum: $e");
-  }
-  return [];
-}
 }
