@@ -9,30 +9,21 @@ class LocalMusicService {
     List<SonauraTrack> tracks = [];
     try {
       final response = await http.get(Uri.parse('$serverUrl/list'));
-      
       if (response.statusCode == 200) {
         List data = jsonDecode(response.body);
         for (var item in data) {
-          String fullAudioUrl = "$serverUrl/file/${Uri.encodeFull(item['path'])}";
-          
-          // Si el servidor encontró carátula, usamos esa URL, si no, una por defecto elegante
-          String coverUrl = item['cover'] != "" 
-              ? "$serverUrl/${Uri.encodeFull(item['cover'])}"
-              : "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=500";
-          
           tracks.add(SonauraTrack(
-            id: fullAudioUrl, 
+            id: "$serverUrl/file/${Uri.encodeFull(item['path'])}", 
             title: item['title'],
-            artist: "Local Vault",
-            coverUrl: coverUrl,
-            quality: item['path'].toString().toLowerCase().endsWith('.flac') ? "HI-RES" : "AUDIO",
-            sampleRate: 44, 
-            bitDepth: 16, 
-            isLocal: true,
+            artist: "Disco NIKO",
+            // Ahora la URL de la carátula va a la ruta de extracción
+            coverUrl: "$serverUrl/${Uri.encodeFull(item['cover'])}",
+            quality: "FLAC HI-RES",
+            sampleRate: 44, bitDepth: 16, isLocal: true,
           ));
         }
       }
-    } catch (e) { print("Error cargando carátulas locales: $e"); }
+    } catch (e) { print("Error: $e"); }
     return tracks;
   }
 }
