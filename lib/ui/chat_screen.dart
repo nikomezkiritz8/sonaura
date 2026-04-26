@@ -7,6 +7,7 @@ import '../models/album_model.dart';
 import 'sonaura_style.dart';
 import 'search_results_screen.dart'; 
 import 'album_results_screen.dart'; 
+import 'library_screen.dart'; // Importamos la nueva pantalla de biblioteca local
 
 class ChatSonaura extends StatefulWidget {
   final String appId;
@@ -50,7 +51,7 @@ class _ChatSonauraState extends State<ChatSonaura> {
       _isTyping = true;
     });
 
-    // 1. Preguntar a Sonaura AI (Ollama)
+    // 1. Preguntar a Sonaura AI (Ollama en tu RTX 4060)
     String response = await _ai.preguntar(texto);
 
     if (!mounted) return;
@@ -60,30 +61,39 @@ class _ChatSonauraState extends State<ChatSonaura> {
       _isTyping = false;
     });
 
-    // 2. Voz Natural (Filtramos las etiquetas para que no las lea el TTS)
+    // 2. Voz Natural y Fluida
+    // Filtramos las etiquetas técnicas para que Sonaura no las lea
     String textoParaHablar = response.replaceAll(RegExp(r'\[.*?\]'), '').trim();
     _voice.hablar(textoParaHablar);
 
-    // 3. Extracción de intención por etiquetas de IA (Precisión total)
+    // 3. Ejecución de comandos inteligentes basados en etiquetas de la IA
     if (response.contains("[SEARCH_ALBUM:")) {
       String query = response.split("[SEARCH_ALBUM:")[1].split("]")[0].trim();
       _ejecutarBusquedaMusical(query, isAlbum: true);
     } else if (response.contains("[SEARCH_TRACK:")) {
       String query = response.split("[SEARCH_TRACK:")[1].split("]")[0].trim();
       _ejecutarBusquedaMusical(query, isAlbum: false);
-    } else {
-      // Fallback: Si la IA no puso etiquetas, usamos el motor de palabras clave antiguo
-      String promptLower = texto.toLowerCase();
-      if (promptLower.contains("album")) {
-         _ejecutarBusquedaMusical(texto.replaceAll("album", ""), isAlbum: true);
-      } else if (promptLower.contains("busca") || promptLower.contains("pon")) {
-         _ejecutarBusquedaMusical(texto, isAlbum: false);
-      }
+    } else if (texto.toLowerCase().contains("biblioteca") || texto.toLowerCase().contains("mi música")) {
+      // Si hablas de tu biblioteca, te llevamos allí
+      _irABibliotecaLocal();
     }
   }
 
+  void _irABibliotecaLocal() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => LibraryScreen(
+          appId: widget.appId,
+          appSecret: widget.appSecret,
+          token: widget.token,
+        ),
+      ),
+    );
+  }
+
   void _ejecutarBusquedaMusical(String queryRaw, {required bool isAlbum}) async {
-    // Limpieza final de la consulta
+    // Limpieza de términos de búsqueda para máxima precisión
     String query = queryRaw
         .replaceAll(RegExp(r'(busca|pon|reproduce|escuchar|encuentra|play|album de|album del|album)', caseSensitive: false), '')
         .trim();
@@ -98,7 +108,6 @@ class _ChatSonauraState extends State<ChatSonaura> {
 
     try {
       if (isAlbum) {
-        // Búsqueda de discografía completa
         List<SonauraAlbum> albums = await qobuz.searchAlbums(query);
         if (albums.isNotEmpty && mounted) {
           Navigator.push(
@@ -114,7 +123,6 @@ class _ChatSonauraState extends State<ChatSonaura> {
           );
         }
       } else {
-        // Búsqueda de canciones sueltas
         List<SonauraTrack> resultados = await qobuz.search(query);
         if (resultados.isNotEmpty && mounted) {
           Navigator.push(
@@ -131,7 +139,7 @@ class _ChatSonauraState extends State<ChatSonaura> {
         }
       }
     } catch (e) {
-      debugPrint("Sonaura Link Error: $e");
+      debugPrint("Sonaura Neural Link Error: $e");
     }
   }
 
@@ -156,6 +164,15 @@ class _ChatSonauraState extends State<ChatSonaura> {
           ],
         ),
         centerTitle: true,
+        actions: [
+          // BOTÓN DE ACCESO A BIBLIOTECA LOCAL (/NIKO/MUSIKK)
+          IconButton(
+            icon: const Icon(Icons.inventory_2_outlined, color: SonauraColors.accentGold, size: 22),
+            onPressed: _irABibliotecaLocal,
+            tooltip: "Mi Biblioteca Local",
+          ),
+          const SizedBox(width: 10),
+        ],
       ),
       body: Column(
         children: [
@@ -175,7 +192,7 @@ class _ChatSonauraState extends State<ChatSonaura> {
                           style: TextStyle(fontSize: 8, color: SonauraColors.accentGold.withOpacity(0.5), letterSpacing: 2)),
                       const SizedBox(height: 10),
                       Text(
-                        // Mostramos el texto limpio de etiquetas en la UI también para que quede elegante
+                        // Limpiamos etiquetas en la interfaz para que se vea impecable
                         m["text"]!.replaceAll(RegExp(r'\[.*?\]'), '').trim(), 
                         style: TextStyle(
                           fontSize: 18, 
@@ -211,7 +228,7 @@ class _ChatSonauraState extends State<ChatSonaura> {
                     controller: _controller,
                     style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w300),
                     decoration: InputDecoration(
-                      hintText: _isListening ? "Escuchando tu voz..." : "Pide un álbum o canción...",
+                      hintText: _isListening ? "Escuchando..." : "Conversa con Sonaura...",
                       hintStyle: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 14),
                       border: InputBorder.none,
                     ),
