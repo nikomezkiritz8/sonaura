@@ -5,53 +5,46 @@ import 'package:http/io_client.dart';
 
 class SonauraAI {
   final String baseUrl = "http://100.72.167.73:11434/api/generate";
-  // Memoria a corto plazo para que sea más lista
-  List<String> memoria = [];
+  static List<String> memoria = [];
 
-  Future<String> preguntar(String prompt) async {
+  Future<String> preguntar(String prompt, {String? metadata}) async {
     try {
       final ioc = HttpClient();
       ioc.findProxy = (uri) => "DIRECT";
       final client = IOClient(ioc);
 
-      // System Prompt de nivel Ingeniero Audiófilo
-      String instruction = """
-      Eres SONAURA, la inteligencia artificial de un sistema de audio High-End.
-      Tu conocimiento sobre música, masterización y discografías es infinito.
+      String contextInfo = metadata != null ? "USUARIO ESCUCHANDO AHORA: $metadata." : "";
+
+      String systemPrompt = """
+      Eres SONAURA, una IA de audio High-End de élite. 
+      $contextInfo
       
-      REGLAS DE ORO:
-      1. Tono: Sofisticado, técnico, breve y extremadamente culto.
-      2. Si el usuario pide un artista o género sin especificar, busca sus mejores pistas: [SEARCH_TRACK: nombre].
-      3. Si el usuario pide un disco o 'álbum', usa: [SEARCH_ALBUM: nombre].
-      4. Si el usuario pide su música o biblioteca, usa: [OPEN_LIBRARY].
-      5. IMPORTANTE: Extrae EXACTAMENTE el nombre del artista o canción. No incluyas 'por favor' o 'puedes poner'.
+      INSTRUCCIONES:
+      1. Tono sofisticado, breve y técnico.
+      2. Si el usuario pide música, usa etiquetas: [SEARCH_TRACK: nombre] o [SEARCH_ALBUM: nombre].
+      3. Si pide 'Insight' o 'Análisis', explica la calidad de grabación y masterización del disco actual.
+      4. Responde SIEMPRE en español.
       
-      Contexto actual: ${memoria.length > 0 ? memoria.last : "Inicio de sesión"}
+      Memoria reciente: ${memoria.length > 0 ? memoria.last : "Nueva sesión"}
       """;
 
       final response = await client.post(
         Uri.parse(baseUrl),
         body: jsonEncode({
           "model": "llama3", 
-          "prompt": "$instruction\nUsuario: $prompt\nSONAURA:",
+          "prompt": "$systemPrompt\nUsuario: $prompt\nSONAURA:",
           "stream": false,
-          "options": {
-            "temperature": 0.3, // Menos creatividad, más precisión
-            "top_p": 0.9
-          }
+          "options": {"temperature": 0.3}
         }),
       ).timeout(const Duration(seconds: 20));
 
       if (response.statusCode == 200) {
-        String resText = jsonDecode(response.body)['response'];
-        // Guardamos en memoria para que la siguiente vez sea más lista
-        if (memoria.length > 5) memoria.removeAt(0);
-        memoria.add("Usuario dijo: $prompt. Sonaura respondió: $resText");
-        return resText;
+        String res = jsonDecode(response.body)['response'];
+        if (memoria.length > 3) memoria.removeAt(0);
+        memoria.add("U: $prompt - S: $res");
+        return res;
       }
-      return "Error de enlace neural.";
-    } catch (e) {
-      return "Sonaura fuera de línea.";
-    }
+      return "Enlace neural inestable.";
+    } catch (e) { return "Sonaura fuera de línea."; }
   }
 }
