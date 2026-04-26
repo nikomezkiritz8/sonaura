@@ -21,14 +21,11 @@ class QobuzService {
 
   Future<List<SonauraTrack>> search(String query) async {
     try {
-      final response = await _directClient.get(
-        Uri.parse('https://www.qobuz.com/api.json/0.2/track/search?query=$query&limit=20'),
-        headers: {'x-user-auth-token': userAuthToken, 'x-app-id': appId},
-      );
+      final url = 'https://www.qobuz.com/api.json/0.2/track/search?query=${Uri.encodeComponent(query)}&limit=50';
+      final response = await _directClient.get(Uri.parse(url), headers: {'x-user-auth-token': userAuthToken, 'x-app-id': appId});
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        List items = data['tracks']['items'];
-        return items.map((item) => SonauraTrack.fromJson(item)).toList();
+        if (data['tracks'] != null) return (data['tracks']['items'] as List).map((item) => SonauraTrack.fromJson(item)).toList();
       }
     } catch (e) { print("Error Search: $e"); }
     return [];
@@ -36,59 +33,36 @@ class QobuzService {
 
   Future<List<SonauraAlbum>> searchAlbums(String query) async {
     try {
-      final response = await _directClient.get(
-        Uri.parse('https://www.qobuz.com/api.json/0.2/album/search?query=$query&limit=20'),
-        headers: {'x-user-auth-token': userAuthToken, 'x-app-id': appId},
-      );
+      final url = 'https://www.qobuz.com/api.json/0.2/album/search?query=${Uri.encodeComponent(query)}&limit=50';
+      final response = await _directClient.get(Uri.parse(url), headers: {'x-user-auth-token': userAuthToken, 'x-app-id': appId});
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        List items = data['albums']['items'];
-        return items.map((item) => SonauraAlbum.fromJson(item)).toList();
+        if (data['albums'] != null) return (data['albums']['items'] as List).map((item) => SonauraAlbum.fromJson(item)).toList();
       }
-    } catch (e) { print("Error Album Search: $e"); }
-    return [];
-  }
-
-  // ESTA ES LA FUNCIÓN CORREGIDA
-  Future<List<SonauraTrack>> getAlbumTracks(String albumId) async {
-    try {
-      final response = await _directClient.get(
-        Uri.parse('https://www.qobuz.com/api.json/0.2/album/get?album_id=$albumId'),
-        headers: {'x-user-auth-token': userAuthToken, 'x-app-id': appId},
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        
-        // 1. Extraemos la carátula general del álbum
-        String albumCover = "";
-        if (data['image'] != null) {
-          albumCover = data['image']['large'] ?? "";
-        }
-
-        // 2. Pasamos esa carátula a cada canción
-        if (data['tracks'] != null && data['tracks']['items'] != null) {
-          List items = data['tracks']['items'];
-          return items.map((item) => SonauraTrack.fromJson(item, defaultCover: albumCover)).toList();
-        }
-      }
-    } catch (e) {
-      print("Error Tracks: $e");
-    }
+    } catch (e) { print("Error Album: $e"); }
     return [];
   }
 
   Future<String?> getHiResStreamUrl(String trackId) async {
-    final String timestamp = (DateTime.now().millisecondsSinceEpoch ~/ 1000).toString();
-    const String formatId = "27";
-    const String intent = "stream";
-    final String signatureInput = "trackgetFileUrlformat_id${formatId}intent${intent}track_id${trackId}${timestamp}${appSecret}";
-    final String requestSig = md5.convert(utf8.encode(signatureInput)).toString();
+    final String ts = (DateTime.now().millisecondsSinceEpoch ~/ 1000).toString();
+    final String sig = md5.convert(utf8.encode("trackgetFileUrlformat_id27intentstreamtrack_id${trackId}${ts}${appSecret}")).toString();
     try {
-      final url = 'https://www.qobuz.com/api.json/0.2/track/getFileUrl?track_id=$trackId&format_id=$formatId&intent=$intent&request_ts=$timestamp&request_sig=$requestSig';
+      final url = 'https://www.qobuz.com/api.json/0.2/track/getFileUrl?track_id=$trackId&format_id=27&intent=stream&request_ts=$ts&request_sig=$sig';
       final response = await _directClient.get(Uri.parse(url), headers: {'x-user-auth-token': userAuthToken, 'x-app-id': appId});
       if (response.statusCode == 200) return jsonDecode(response.body)['url'];
     } catch (e) { print("Error Stream: $e"); }
     return null;
+  }
+  
+  Future<List<SonauraTrack>> getAlbumTracks(String albumId) async {
+    try {
+      final response = await _directClient.get(Uri.parse('https://www.qobuz.com/api.json/0.2/album/get?album_id=$albumId'), headers: {'x-user-auth-token': userAuthToken, 'x-app-id': appId});
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        String? cover = data['image'] != null ? data['image']['large'] : null;
+        if (data['tracks'] != null) return (data['tracks']['items'] as List).map((item) => SonauraTrack.fromJson(item, defaultCover: cover)).toList();
+      }
+    } catch (e) { print("Error Album Tracks: $e"); }
+    return [];
   }
 }
