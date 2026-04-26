@@ -12,11 +12,10 @@ class SonauraAI {
       ioc.findProxy = (uri) => "DIRECT";
       final client = IOClient(ioc);
 
-      // System Prompt Ultra-Refinado
       String systemPrompt = "Eres Sonaura, una IA audiófila. "
           "Si el usuario pide música, responde poéticamente y AL FINAL añade una etiqueta: "
           "[SEARCH_TRACK: nombre] para canciones o [SEARCH_ALBUM: nombre] para álbumes. "
-          "Ejemplo: 'Excelente elección. Aquí tienes el álbum de Dermot Kennedy. [SEARCH_ALBUM: Dermot Kennedy Sonder]'";
+          "Responde SIEMPRE en español.";
 
       final response = await client.post(
         Uri.parse(baseUrl),

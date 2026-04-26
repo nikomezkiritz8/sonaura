@@ -45,7 +45,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // FONDO DIFUMINADO
+          // FONDO DIFUMINADO (BLUR EFFECT)
           Container(
             height: double.infinity, width: double.infinity,
             decoration: BoxDecoration(
@@ -53,67 +53,49 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
-              child: Container(color: Colors.black.withOpacity(0.4)),
+              child: Container(color: Colors.black.withOpacity(0.5)),
             ),
           ),
           
-          // CONTENIDO
           SafeArea(
             child: Column(
               children: [
                 AppBar(
                   backgroundColor: Colors.transparent, elevation: 0,
-                  leading: IconButton(icon: const Icon(Icons.keyboard_arrow_down, size: 35), onPressed: () => Navigator.pop(context)),
+                  leading: IconButton(icon: const Icon(Icons.keyboard_arrow_down, size: 35, color: Colors.white70), onPressed: () => Navigator.pop(context)),
                   title: Text("${widget.track.quality} | ${widget.track.bitDepth}-BIT", style: const TextStyle(fontSize: 10, letterSpacing: 2, color: SonauraColors.accentGold)),
                   centerTitle: true,
                 ),
                 const Spacer(),
-                
-                // CARÁTULA PRINCIPAL
                 Container(
                   width: MediaQuery.of(context).size.width * 0.8,
                   height: MediaQuery.of(context).size.width * 0.8,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(15),
-                    boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 40, spreadRadius: 10)],
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 40, spreadRadius: 5)],
                     image: DecorationImage(image: NetworkImage(widget.track.coverUrl), fit: BoxFit.cover),
                   ),
                 ),
-                
                 const Spacer(),
-                Text(widget.track.title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-                Text(widget.track.artist.toUpperCase(), style: const TextStyle(fontSize: 13, letterSpacing: 4, color: Colors.white60)),
-                
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 30),
-                  child: Column(
-                    children: [
-                      SliderTheme(
-                        data: SliderTheme.of(context).copyWith(trackHeight: 2, thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6), activeTrackColor: Colors.white, inactiveTrackColor: Colors.white24),
-                        child: Slider(
-                          value: _position.inSeconds.toDouble(),
-                          max: _duration.inSeconds.toDouble() > 0 ? _duration.inSeconds.toDouble() : 1.0,
-                          onChanged: (v) => _audioPlayer.seek(Duration(seconds: v.toInt())),
-                        ),
-                      ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(_formatDuration(_position), style: const TextStyle(color: Colors.white38, fontSize: 10)),
-                          Text(_formatDuration(_duration), style: const TextStyle(color: Colors.white38, fontSize: 10)),
-                        ],
-                      ),
-                    ],
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 30),
+                  child: Text(widget.track.title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white), textAlign: TextAlign.center),
                 ),
-                
+                Text(widget.track.artist.toUpperCase(), style: const TextStyle(fontSize: 12, letterSpacing: 4, color: Colors.white60)),
+                const SizedBox(height: 30),
+                Slider(
+                  activeColor: Colors.white, inactiveColor: Colors.white10,
+                  value: _position.inSeconds.toDouble(),
+                  max: _duration.inSeconds.toDouble() > 0 ? _duration.inSeconds.toDouble() : 1.0,
+                  onChanged: (v) => _audioPlayer.seek(Duration(seconds: v.toInt())),
+                ),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     const Icon(Icons.shuffle, color: Colors.white24),
                     IconButton(icon: const Icon(Icons.skip_previous, size: 45, color: Colors.white), onPressed: () {}),
                     IconButton(
-                      icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled, size: 85, color: Colors.white),
+                      icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled, size: 80, color: Colors.white),
                       onPressed: () => _isPlaying ? _audioPlayer.pause() : _audioPlayer.resume(),
                     ),
                     IconButton(icon: const Icon(Icons.skip_next, size: 45, color: Colors.white), onPressed: () {}),
