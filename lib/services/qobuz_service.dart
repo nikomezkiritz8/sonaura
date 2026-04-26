@@ -64,4 +64,24 @@ class QobuzService {
     } catch (e) { print("Error Stream: $e"); }
     return null;
   }
+  
+  Future<List<SonauraTrack>> getAlbumTracks(String albumId) async {
+  try {
+    final response = await _directClient.get(
+      Uri.parse('https://www.qobuz.com/api.json/0.2/album/get?album_id=$albumId'),
+      headers: {'x-user-auth-token': userAuthToken, 'x-app-id': appId},
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data['tracks'] != null && data['tracks']['items'] != null) {
+        List items = data['tracks']['items'];
+        return items.map((item) => SonauraTrack.fromJson(item)).toList();
+      }
+    }
+  } catch (e) {
+    print("Error obteniendo canciones del álbum: $e");
+  }
+  return [];
+}
 }
