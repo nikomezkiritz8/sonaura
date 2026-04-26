@@ -15,6 +15,7 @@ class VoiceService {
     await Permission.microphone.request();
     await _tts.setLanguage("es-ES");
     await _tts.setSpeechRate(0.5);
+    // IMPORTANTE: Permitimos que las funciones esperen a que termine de hablar
     await _tts.awaitSpeakCompletion(true);
 
     return await _speech.initialize(
@@ -35,12 +36,17 @@ class VoiceService {
       },
       localeId: 'es_ES',
       listenFor: const Duration(seconds: 30),
-      pauseFor: const Duration(seconds: 2), // Detecta el silencio tras 2 segundos
+      pauseFor: const Duration(seconds: 2),
       listenMode: ListenMode.confirmation,
     );
   }
 
-  void detener() async => await _speech.stop();
+  void detenerEscucha() async => await _speech.stop();
+
+  // --- NUEVA FUNCIÓN: DETENER HABLA ---
+  Future<void> detenerHabla() async {
+    await _tts.stop();
+  }
 
   Future<void> hablar(String texto) async {
     if (Platform.isLinux) return;

@@ -70,10 +70,13 @@ class _ChatSonauraState extends State<ChatSonaura> {
       _isTyping = false;
     });
 
-    // 1. Sonaura habla (Voz profesional)
     await _voice.hablar(response);
+    _execCommands(response, text);
 
-    // 2. Ejecución Inteligente
+    if (_autoListen) _startListeningLoop();
+  }
+
+  void _execCommands(String response, String text) {
     if (response.contains("[SEARCH_ALBUM:")) {
       _execSearch(response.split("[SEARCH_ALBUM:")[1].split("]")[0], true);
     } else if (response.contains("[SEARCH_TRACK:")) {
@@ -81,8 +84,6 @@ class _ChatSonauraState extends State<ChatSonaura> {
     } else if (response.contains("[OPEN_LIBRARY]") || text.toLowerCase().contains("biblioteca")) {
       _navToLibrary();
     }
-
-    if (_autoListen) _startListeningLoop();
   }
 
   void _execSearch(String q, bool isAlbum) async {
@@ -141,6 +142,8 @@ class _ChatSonauraState extends State<ChatSonaura> {
             ),
           ),
           if (_isTyping) const LinearProgressIndicator(color: SonauraColors.accentGold, backgroundColor: Colors.transparent),
+          
+          // --- ÁREA DE CONTROL INFERIOR ---
           Container(
             padding: const EdgeInsets.fromLTRB(30, 20, 30, 40),
             decoration: const BoxDecoration(color: SonauraColors.surface, borderRadius: BorderRadius.vertical(top: Radius.circular(40))),
@@ -150,6 +153,17 @@ class _ChatSonauraState extends State<ChatSonaura> {
                 Row(
                   children: [
                     Expanded(child: TextField(controller: _controller, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w300), decoration: const InputDecoration(hintText: "Comando de voz o texto...", border: InputBorder.none))),
+                    
+                    // BOTÓN PARA HACER CALLAR A LA IA
+                    if (!_isListening) 
+                      IconButton(
+                        icon: const Icon(Icons.volume_off_rounded, color: Colors.white24, size: 24),
+                        onPressed: () => _voice.detenerHabla(),
+                        tooltip: "Silenciar voz de Sonaura",
+                      ),
+
+                    const SizedBox(width: 10),
+
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 300),
                       padding: const EdgeInsets.all(12),
